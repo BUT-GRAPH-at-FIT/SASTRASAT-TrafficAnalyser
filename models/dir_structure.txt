@@ -1,0 +1,98 @@
+.
+├── classifiers
+│   ├── classifier_garage_ResNet50_2DBB
+│   │   ├── final_model.h5
+│   │   └── types_mapping.pkl
+│   ├── colors_MobileNet
+│   │   ├── colors_mapping.pkl
+│   │   └── final_model.h5
+│   ├── MobileNet_2DBB
+│   │   ├── final_model.h5
+│   │   ├── frozen_graph.pb
+│   │   ├── graph_def.pb.ascii
+│   │   └── types_mapping.pkl
+│   └── ResNet50_2DBB
+│       ├── final_model.h5
+│       ├── frozen_graph.pb
+│       ├── graph_def.pb.ascii
+│       └── types_mapping.pkl
+├── detectors
+│   ├── vehicle_frcnn_inception_v2
+│   │   ├── checkpoint
+│   │   ├── frozen_inference_graph.pb
+│   │   ├── model.ckpt.data-00000-of-00001
+│   │   ├── model.ckpt.index
+│   │   ├── model.ckpt.meta
+│   │   ├── proto.config
+│   │   └── saved_model
+│   │       ├── saved_model.pb
+│   │       └── variables
+│   ├── vehicle_frcnn_res101
+│   │   ├── checkpoint
+│   │   ├── frozen_inference_graph.pb
+│   │   ├── model.ckpt.data-00000-of-00001
+│   │   ├── model.ckpt.index
+│   │   ├── model.ckpt.meta
+│   │   ├── proto.config
+│   │   └── saved_model
+│   │       ├── saved_model.pb
+│   │       └── variables
+│   ├── vehicle_frcnn_res50
+│   │   ├── checkpoint
+│   │   ├── frozen_inference_graph.pb
+│   │   ├── model.ckpt.data-00000-of-00001
+│   │   ├── model.ckpt.index
+│   │   ├── model.ckpt.meta
+│   │   ├── proto.config
+│   │   └── saved_model
+│   │       ├── saved_model.pb
+│   │       └── variables
+│   ├── vehicle_peds_frcnn_res101
+│   │   ├── checkpoint
+│   │   ├── frozen_inference_graph.pb
+│   │   ├── model.ckpt.data-00000-of-00001
+│   │   ├── model.ckpt.index
+│   │   ├── model.ckpt.meta
+│   │   ├── proto.config
+│   │   └── saved_model
+│   │       ├── saved_model.pb
+│   │       └── variables
+│   ├── vehicle_peds_frcnn_res50
+│   │   ├── checkpoint
+│   │   ├── frozen_inference_graph.pb
+│   │   ├── model.ckpt.data-00000-of-00001
+│   │   ├── model.ckpt.index
+│   │   ├── model.ckpt.meta
+│   │   ├── proto.config
+│   │   └── saved_model
+│   │       ├── saved_model.pb
+│   │       └── variables
+│   ├── vehicle_peds_ssd_mobilenet
+│   │   ├── checkpoint
+│   │   ├── frozen_inference_graph.pb
+│   │   ├── model.ckpt.data-00000-of-00001
+│   │   ├── model.ckpt.index
+│   │   ├── model.ckpt.meta
+│   │   ├── proto.config
+│   │   └── saved_model
+│   │       ├── saved_model.pb
+│   │       └── variables
+│   └── vehicle_ssd_mobilenet
+│       ├── checkpoint
+│       ├── frozen_inference_graph.pb
+│       ├── model.ckpt.data-00000-of-00001
+│       ├── model.ckpt.index
+│       ├── model.ckpt.meta
+│       ├── proto.config
+│       └── saved_model
+│           ├── saved_model.pb
+│           └── variables
+├── dir_structure.txt
+├── download_models.sh
+├── feature_extractors
+│   └── vehicle_MobileNet_AIC_128dim
+│       ├── meta.pkl
+│       └── model.h5
+└── SaSTraSAT_TrafficAnalyser_models.zip
+
+29 directories, 66 files
