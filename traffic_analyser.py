@@ -26,6 +26,8 @@ from libsj.utils import setup_logging, load_cache, save_cache, EmptyContext, ens
 from libsj.threading import BaseThread, QueuesMonitorThread, ProcessingThread, QueueDuplicatorThread
 # from libsj.traffic_calib import lstsq_lines_intersection, TrafficCalibration, optimize_vp2_by_measurements
 
+from omegaconf import DictConfig, OmegaConf
+from hydra import initialize, compose, initialize_config_module
 
 
 STATUS_BAR_HEIGHT = 30
@@ -586,9 +588,21 @@ class DataOutputThread(ProcessingThread):
         #             del self.features[track_id]
 
 
-if __name__ == "__main__":
+def main(cfg: DictConfig) -> None:
+    
+    
     setup_logging(logging.DEBUG)
-    args = parse_args()
+    # args = parse_args()
+    
+    # Intialize Hydra config
+    initialize(config_path="config")  # Inicializujte Hydra s cestou k adresáři konfigurace
+    cfg = compose(config_name="config")  # Načtěte konfigurační soubor config.yaml
+    # initialize_config_module(config_module="config")
+    setup_logging(logging.DEBUG)
+    # cfg = compose(config_name="config", overrides=["video=test.mp4", "output=test_out"])
+
+    print(OmegaConf.to_yaml(cfg))  # Vypište konfiguraci
+
 
     all_queues = []
     all_threads = []
@@ -684,3 +698,11 @@ if __name__ == "__main__":
     finally:
         for t in all_threads:
             t.exit()
+
+
+@hydra.main(config_path="conf", config_name="config")
+def hydra_main(cfg: DictConfig) -> None:
+    main(cfg)
+
+if __name__ == "__main__":
+    hydra_main()

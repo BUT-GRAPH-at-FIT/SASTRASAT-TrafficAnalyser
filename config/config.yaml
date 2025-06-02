@@ -1,0 +1,38 @@
+app:
+  monitor_report_period: 60
+  queue_size: 256
+  data_output_api: null # "url_to_data_api"
+  av_options:
+    rtsp_transport: "tcp"
+    buffer_size: "2048"
+    prefer_tcp: "1"
+
+video:
+  source: null # "path_to_video_file_or_rtsp_stream"
+  frame_step: 1
+  skip_frames: 0
+  take_frames: null
+
+detection:
+  model: models/detectors/vehicle_peds_frcnn_res101/frozen_inference_graph.pb # "path_to_frozen_graph"
+  gpu_mem: 0.5
+  threshold: 0.5
+
+tracker:
+  type: IoU
+  iou: 0.4
+  terminate_after: 5
+
+classification:
+  mmr_model: models/classifiers/classifier_frontal_ResNet50_2DBB # "path_to_keras_model"
+  color_model: models/classifiers/colors_MobileNet
+
+extractor:
+  model: models/feature_extractors/vehicle_MobileNet_AIC_128dim/ # "path_to_keras_model"
+
+output:
+  data_dir: traffic_analyser_output_dir # "path_to_output_dir"
+  video_output: 
+    file: null
+    codec: mpeg4
+    fps: 15
