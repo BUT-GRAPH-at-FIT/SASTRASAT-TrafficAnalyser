@@ -52,7 +52,7 @@ class VideoReader(BaseThread):
 
     @property
     def fps(self):
-        rate = self.container.streams.video[self.video_ind].rate
+        rate = self.container.streams.video[self.video_ind].average_rate
         if (rate == 0) or (rate is None):
             return 0
         else:
@@ -104,7 +104,7 @@ class VideoWriter(BaseThread):
         else:
             self.queue = input_queue
         logging.info("Opening output video file: %s"%video_path)
-        self.container = av.open(video_path, mode="w")
+        self.container = av.open(video_path.file, mode="w")
         self.output_stream = self.container.add_stream(codec, rate=fps)
         self.output_stream.width = width
         self.output_stream.height = height
@@ -153,6 +153,10 @@ class VideoWriter(BaseThread):
                 self.frames_written += 1
             except Empty:
                 pass
+            except Exception as e: # TODO: Fix exception on the last frame.
+                logging.error(f"Error while writing video frame. {str(e)}")
+                self._set_finished()
+                return
 
     def __exit__(self, exc_type, value, traceback):
         if exc_type is None:
