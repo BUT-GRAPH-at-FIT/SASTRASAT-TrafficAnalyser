@@ -31,10 +31,9 @@ class ObjectDetector:
         self.detection_classes = self._get_tensor('detection_classes:0')
         
     def _get_tensor(self, name):
-        if self.prefix is not None and self.prefix != "":
-            name = self.prefix + "/" + name
+        # if self.prefix is not None and self.prefix != "":
+        #     name = self.prefix + "/" + name
         return self.session.graph.get_tensor_by_name(name)
-    
     
     def _threshold(self, arrays, threshold, scores_arrays_ind=1):
         mask = arrays[scores_arrays_ind] >= threshold
