@@ -27,7 +27,7 @@ from libsj.threading import BaseThread, QueuesMonitorThread, ProcessingThread, Q
 # from libsj.traffic_calib import lstsq_lines_intersection, TrafficCalibration, optimize_vp2_by_measurements
 
 from omegaconf import DictConfig, OmegaConf
-from hydra import initialize, compose, initialize_config_module
+import hydra
 
 
 STATUS_BAR_HEIGHT = 30
@@ -589,14 +589,12 @@ class DataOutputThread(ProcessingThread):
 
 
 def main(cfg: DictConfig) -> None:
-    
-    
     setup_logging(logging.DEBUG)
     # args = parse_args()
     
     # Intialize Hydra config
-    initialize(config_path="config")  # Inicializujte Hydra s cestou k adresáři konfigurace
-    cfg = compose(config_name="config")  # Načtěte konfigurační soubor config.yaml
+    # initialize(config_path="config")  # Inicializujte Hydra s cestou k adresáři konfigurace
+    # cfg = compose(config_name="config")  # Načtěte konfigurační soubor config.yaml
     # initialize_config_module(config_module="config")
     setup_logging(logging.DEBUG)
     # cfg = compose(config_name="config", overrides=["video=test.mp4", "output=test_out"])
@@ -608,10 +606,10 @@ def main(cfg: DictConfig) -> None:
     all_threads = []
     try:
         # READER
-        reader = VideoReader(args.video,
-                             frame_step=args.frame_step,
-                             skip_frames=args.skip_frames,
-                             take_frames=args.take_frames,
+        reader = VideoReader(cfg.video.source,
+                             frame_step=cfg.video.frame_step,
+                             skip_frames=cfg.video.skip_frames,
+                             take_frames=cfg.video.take_frames,
                              queue_max_size=QUEUE_SIZE,
                              av_options={"rtsp_transport":"tcp","buffer_size":"2048","prefer_tcp":"1"})
         all_threads.append(reader)
@@ -623,37 +621,37 @@ def main(cfg: DictConfig) -> None:
 
         # DETECTOR
         detections_output_queue = Queue(QUEUE_SIZE)
-        detector = ObjectDetectorThread(args.detection_model, reader.queue, detections_output_queue,
-                                        gpu_mem=args.detection_gpu_mem,
+        detector = ObjectDetectorThread(cfg.detection.model, reader.queue, detections_output_queue,
+                                        gpu_mem=cfg.detection.gpu_mem,
                                         allow_growth=True,  #TODO: nastavit z parametrů??
                                         detector_scale_factor=DETECTOR_SCALE_FACTOR,
-                                        threshold=args.detection_threshold)
+                                        threshold=cfg.detection.threshold)
 
         all_threads.append(detector)
         all_queues.append(("tracker_in", detections_output_queue))
 
         # TRACKER
         tracker_output_queue = Queue(QUEUE_SIZE)
-        if args.tracker == "IoU":
-            tracker_impl = IoUTracker(args.tracker_iou, args.tracker_terminate_after)
-        elif args.tracker == "KCF":
-            tracker_impl = KCFTracker(args.tracker_iou, args.tracker_terminate_after)
+        if cfg.tracker.type == "IoU":
+            tracker_impl = IoUTracker(cfg.tracker.iou, cfg.tracker.terminate_after)
+        elif cfg.tracker.type == "KCF":
+            tracker_impl = KCFTracker(cfg.tracker.iou, cfg.tracker.terminate_after)
         else:
-            raise ValueError("Unsupported tracker: '%s'" % args.tracker)
+            raise ValueError("Unsupported tracker: '%s'" % cfg.tracker.type)
         tracker = TrackerThread(tracker_impl, detections_output_queue, tracker_output_queue)
         all_threads.append(tracker)
         all_queues.append(("classifier_in", tracker_output_queue))
 
         # CLASSIFIER
         classifier_output_queue = Queue(QUEUE_SIZE)
-        classifier = ClassificationThread(args.classification_model, args.color_classification_model, args.extractor_model, tracker_output_queue, classifier_output_queue)
+        classifier = ClassificationThread(cfg.classification.mmr_model, cfg.classification.color_model, cfg.extractor.model, tracker_output_queue, classifier_output_queue)
         all_threads.append(classifier)
         all_queues.append(("analyser_in", classifier_output_queue))
         # all_queues.append(("splitter_in", classifier_output_queue))
 
         # ANALYSER
         analyser_output_queue = Queue(QUEUE_SIZE)
-        analyser = AnalyseThread(config, classifier_output_queue, analyser_output_queue, args.calibration_output)
+        analyser = AnalyseThread(config, classifier_output_queue, analyser_output_queue, cfg.output.data_dir)
         # analyser = AnalyseThread(config, tracker_output_queue, analyser_output_queue, args.calibration_output)
         all_threads.append(analyser)
         all_queues.append(("splitter_in", analyser_output_queue))
@@ -677,16 +675,16 @@ def main(cfg: DictConfig) -> None:
         all_threads.append(monitor)
 
         # VIDEO OUTPUT
-        if args.video_output is None:
+        if cfg.output.video_output is None:
             video_output = ShowThread(draw_output_queue)
         else:
             height, width = reader.frame_shape[0:2]
-            video_output = VideoWriter(args.video_output, width, height + STATUS_BAR_HEIGHT, codec="mpeg4",
+            video_output = VideoWriter(cfg.output.video_output, width, height + STATUS_BAR_HEIGHT, codec="mpeg4",
                                        fps=15, input_queue=draw_output_queue, swap_channels=True)
         all_threads.append(video_output)
 
         # DATA OUTPUT
-        data_output = DataOutputThread(data_output_queue_in, os.path.join(args.output, "cars"))
+        data_output = DataOutputThread(data_output_queue_in, os.path.join(cfg.output.data_dir, "cars"))
         all_threads.append(data_output)
 
         # START THREADS
@@ -700,7 +698,7 @@ def main(cfg: DictConfig) -> None:
             t.exit()
 
 
-@hydra.main(config_path="conf", config_name="config")
+@hydra.main(config_path="config", config_name="config")
 def hydra_main(cfg: DictConfig) -> None:
     main(cfg)
 
