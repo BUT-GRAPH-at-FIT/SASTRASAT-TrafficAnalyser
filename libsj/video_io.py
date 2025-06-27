@@ -128,7 +128,8 @@ class VideoWriter(BaseThread):
     def _mux_packets(self, packets):
         if packets is not None:
             self.container.mux(packets)
-        return packets is not None
+        # In newer version of AV, encode() does return empty array instead of None.
+        return packets is not None and len(packets) > 0
 
     def _encode_frame(self, frame):
         output_frame = av.VideoFrame.from_ndarray(frame, format='rgb24')
@@ -153,10 +154,6 @@ class VideoWriter(BaseThread):
                 self.frames_written += 1
             except Empty:
                 pass
-            except Exception as e: # TODO: Fix exception on the last frame.
-                logging.error(f"Error while writing video frame. {str(e)}")
-                self._set_finished()
-                return
 
     def __exit__(self, exc_type, value, traceback):
         if exc_type is None:
