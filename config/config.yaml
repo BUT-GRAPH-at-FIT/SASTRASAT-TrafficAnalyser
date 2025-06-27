@@ -32,6 +32,7 @@ extractor:
 
 output:
   data_dir: traffic_analyser_output_dir # "path_to_output_dir"
+  save_crops: True
   video_output: 
     file: null
     codec: mpeg4
