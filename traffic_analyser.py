@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+from datetime import datetime
+
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -475,6 +477,8 @@ class DataOutputThread(ProcessingThread):
         self.features = {}
 
     def process(self, data):
+        if self.save_vehicle_crops:
+            ensure_dir(os.path.join(self.output_dir, "vehicle_crops"))
 
         # headers = {k: str(type(v)) for k,v in data.items()}
 
@@ -559,7 +563,7 @@ class DataOutputThread(ProcessingThread):
                     data_to_send["veh_color_class_prob"] = float(vehicle_color_p)
                     data_to_send["obj_feature_vector"] = [float(x) for x in track["feature"]]
 
-                    track_feats[os.path.join(self.output_dir, f"track_{track_id}")] = [
+                    track_feats[f"vehicle_{track_id}"] = [
                         float(x) for x in (track["feature"] if "feature" in track.keys() else [])
                     ]
 
@@ -567,7 +571,7 @@ class DataOutputThread(ProcessingThread):
                         vehicle_crop_np = track["crop"] if "crop" in track.keys() else None
                         if vehicle_crop_np is not None:
                             vehicle_crop = cv2.cvtColor(vehicle_crop_np, cv2.COLOR_RGB2BGR)
-                            cv2.imwrite(os.path.join(self.output_dir, f"crop_{track_id}.jpg"), vehicle_crop)
+                            cv2.imwrite(os.path.join(self.output_dir, "vehicle_crops", f"vehicle_{track_id}.jpg"), vehicle_crop)
 
                 DATA_LIMIT = 10000
                 #self.zmq_socket.send_json({"header": headers, "data" : data_to_send})
@@ -575,12 +579,12 @@ class DataOutputThread(ProcessingThread):
                     self.data_to_store.append({"vian_token": VIAN_TOKEN, "vian_server_url": VIAN_SERVER_URL, "vian_project_id": VIAN_PROJECT_ID, "header": headers, "data" : data_to_send})
 
                 if len(self.data_to_store) == DATA_LIMIT:
-                    with open("queue_data.pkl","wb") as f:
+                    with open(os.path.join(self.output_dir, "queue_data.pkl"),"wb") as f:
                         pickle.dump(self.data_to_store,f)
                         sys.exit(1)
                 del data_to_send
 
-        with open('track_feats.csv', 'a') as csv_file:
+        with open(os.path.join(self.output_dir, 'track_feats.csv'), 'a') as csv_file:
             writer = csv.writer(csv_file)
             for key, value in track_feats.items():
                 writer.writerow([key, value])
@@ -625,6 +629,9 @@ def main(cfg: DictConfig) -> None:
 
     print(OmegaConf.to_yaml(cfg))  # Vypište konfiguraci
 
+    # experiment path: year_month/day/hour/minute
+    experiment_path = datetime.now().strftime("outputs/%Y_%m/%d/%H/%M/")
+    ensure_dir(experiment_path)
 
     all_queues = []
     all_threads = []
@@ -704,12 +711,13 @@ def main(cfg: DictConfig) -> None:
             video_output = ShowThread(draw_output_queue)
         else:
             height, width = reader.frame_shape[0:2]
-            video_output = VideoWriter(cfg.output.video_output, width, height + STATUS_BAR_HEIGHT, codec="mpeg4",
+            video_path = os.path.join(experiment_path, cfg.output.video_output.file)
+            video_output = VideoWriter(video_path, width, height + STATUS_BAR_HEIGHT, codec="mpeg4",
                                        fps=15, input_queue=draw_output_queue, swap_channels=True)
         all_threads.append(video_output)
 
         # DATA OUTPUT
-        data_output = DataOutputThread(data_output_queue_in, os.path.join(cfg.output.data_dir, "cars"),
+        data_output = DataOutputThread(data_output_queue_in, experiment_path,
                                        save_vehicle_crops=cfg.output.save_crops)
         all_threads.append(data_output)
 
