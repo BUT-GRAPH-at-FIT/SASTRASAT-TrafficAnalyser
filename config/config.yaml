@@ -1,3 +1,9 @@
+hydra:
+  job:
+    chdir: False
+  run:
+    dir: .
+
 app:
   monitor_report_period: 60
   queue_size: 256
@@ -34,6 +40,6 @@ output:
   data_dir: traffic_analyser_output_dir # "path_to_output_dir"
   save_crops: True
   video_output: 
-    file: null
+    file: processed_file.mp4
     codec: mpeg4
     fps: 15

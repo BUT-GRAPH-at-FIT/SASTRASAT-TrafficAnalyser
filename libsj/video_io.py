@@ -104,7 +104,7 @@ class VideoWriter(BaseThread):
         else:
             self.queue = input_queue
         logging.info("Opening output video file: %s"%video_path)
-        self.container = av.open(video_path.file, mode="w")
+        self.container = av.open(video_path, mode="w")
         self.output_stream = self.container.add_stream(codec, rate=fps)
         self.output_stream.width = width
         self.output_stream.height = height
