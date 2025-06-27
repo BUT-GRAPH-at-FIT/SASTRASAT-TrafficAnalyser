@@ -630,7 +630,7 @@ def main(cfg: DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))  # Vypište konfiguraci
 
     # experiment path: year_month/day/hour/minute
-    experiment_path = datetime.now().strftime("outputs/%Y_%m/%d/%H/%M/")
+    experiment_path = datetime.now().strftime(f"{cfg.output.data_dir}/%Y_%m/%d/%H/%M/")
     ensure_dir(experiment_path)
 
     all_queues = []

@@ -37,7 +37,7 @@ extractor:
   model: models/feature_extractors/vehicle_MobileNet_AIC_128dim/ # "path_to_keras_model"
 
 output:
-  data_dir: traffic_analyser_output_dir # "path_to_output_dir"
+  data_dir: output # "path_to_output_dir"
   save_crops: True
   video_output: 
     file: processed_file.mp4
