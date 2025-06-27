@@ -13,6 +13,7 @@ import json
 import zmq
 import sys
 import pickle
+import csv
 
 from tensorflow.keras.layers import DepthwiseConv2D, ReLU
 from tensorflow.keras.models import load_model, Model
@@ -70,11 +71,13 @@ class ClassificationThread(ProcessingThread):
     """
 
     # def __init__(self, model_path, input_queue, output_queue, name="Classifier"):
-    def __init__(self, model_path, color_model_path, extractor_model_path, input_queue, output_queue, name="Classifier"):
+    def __init__(self, model_path, color_model_path, extractor_model_path, input_queue, output_queue,
+                 collect_vehicle_crops=False, name="Classifier"):
         super().__init__(input_queue, output_queue, name)
         self.model_path = model_path
         self.color_model_path = color_model_path
         self.extractor_model_path = extractor_model_path
+        self.collect_vehicle_crops = collect_vehicle_crops
         # Init session for keras models
         config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True
@@ -166,7 +169,7 @@ class ClassificationThread(ProcessingThread):
             feats = self.vehicle_extractor.predict(np_crops, batch_size=16)
             feats /= np.linalg.norm(feats, axis=1, keepdims=True)
 
-            for track_id, pred, color_pred, feat in zip(vehicle_track_ids, predictions, color_predictions, feats):
+            for idx, (track_id, pred, color_pred, feat) in enumerate(zip(vehicle_track_ids, predictions, color_predictions, feats)):
                 ind = np.argmax(pred)
                 classification = (self.mapping[ind], pred[ind])
                 ind = np.argmax(color_pred)
@@ -174,6 +177,9 @@ class ClassificationThread(ProcessingThread):
                 data["tracks"][track_id]["classification"] = classification
                 data["tracks"][track_id]["color"] = color
                 data["tracks"][track_id]["feature"] = feat
+
+                if self.collect_vehicle_crops:
+                    data["tracks"][track_id]["crop"] = vehicle_crops[idx]
 
         if len(peds_crops) > 0:
             np_crops = np.asarray(peds_crops)
@@ -451,13 +457,15 @@ class DataOutputThread(ProcessingThread):
     Saves images of vehicles and their feature vectors.
     """
 
-    def __init__(self, input_queue, output_dir, zmq_ip_addr="tcp://localhost:5555", name="DataOutput"):
+    def __init__(self, input_queue, output_dir, zmq_ip_addr="tcp://localhost:5555",
+                 save_vehicle_crops=False, name="DataOutput"):
         super().__init__(input_queue, None, name)
         self.output_dir = output_dir
         self.zmq_ip_addr = zmq_ip_addr
         self.zmq_context = zmq.Context()
         self.zmq_socket = self.zmq_context.socket(zmq.PUSH)
         self.zmq_socket.connect(self.zmq_ip_addr)
+        self.save_vehicle_crops = save_vehicle_crops
 
         self.data_to_store = []
 
@@ -493,6 +501,7 @@ class DataOutputThread(ProcessingThread):
         headers["veh_color_class"] = "string"
         headers["veh_color_class_prob"] = "float"
 
+        track_feats = {}
 
         for track_id, track in data["tracks"].items():
             # if track["in_roi"] and track["status"] in {"new", "detected"}:
@@ -550,6 +559,16 @@ class DataOutputThread(ProcessingThread):
                     data_to_send["veh_color_class_prob"] = float(vehicle_color_p)
                     data_to_send["obj_feature_vector"] = [float(x) for x in track["feature"]]
 
+                    track_feats[os.path.join(self.output_dir, f"track_{track_id}")] = [
+                        float(x) for x in (track["feature"] if "feature" in track.keys() else [])
+                    ]
+
+                    if self.save_vehicle_crops:
+                        vehicle_crop_np = track["crop"] if "crop" in track.keys() else None
+                        if vehicle_crop_np is not None:
+                            vehicle_crop = cv2.cvtColor(vehicle_crop_np, cv2.COLOR_RGB2BGR)
+                            cv2.imwrite(os.path.join(self.output_dir, f"crop_{track_id}.jpg"), vehicle_crop)
+
                 DATA_LIMIT = 10000
                 #self.zmq_socket.send_json({"header": headers, "data" : data_to_send})
                 if len(self.data_to_store) < DATA_LIMIT:
@@ -560,6 +579,11 @@ class DataOutputThread(ProcessingThread):
                         pickle.dump(self.data_to_store,f)
                         sys.exit(1)
                 del data_to_send
+
+        with open('track_feats.csv', 'a') as csv_file:
+            writer = csv.writer(csv_file)
+            for key, value in track_feats.items():
+                writer.writerow([key, value])
 
         # self.zmq_socket.send_json(headers)
         # pass
@@ -644,7 +668,8 @@ def main(cfg: DictConfig) -> None:
 
         # CLASSIFIER
         classifier_output_queue = Queue(QUEUE_SIZE)
-        classifier = ClassificationThread(cfg.classification.mmr_model, cfg.classification.color_model, cfg.extractor.model, tracker_output_queue, classifier_output_queue)
+        classifier = ClassificationThread(cfg.classification.mmr_model, cfg.classification.color_model, cfg.extractor.model,
+                                          tracker_output_queue, classifier_output_queue, collect_vehicle_crops=cfg.output.save_crops)
         all_threads.append(classifier)
         all_queues.append(("analyser_in", classifier_output_queue))
         # all_queues.append(("splitter_in", classifier_output_queue))
@@ -684,7 +709,8 @@ def main(cfg: DictConfig) -> None:
         all_threads.append(video_output)
 
         # DATA OUTPUT
-        data_output = DataOutputThread(data_output_queue_in, os.path.join(cfg.output.data_dir, "cars"))
+        data_output = DataOutputThread(data_output_queue_in, os.path.join(cfg.output.data_dir, "cars"),
+                                       save_vehicle_crops=cfg.output.save_crops)
         all_threads.append(data_output)
 
         # START THREADS
