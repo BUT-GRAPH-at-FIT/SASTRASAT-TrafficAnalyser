@@ -467,6 +467,7 @@ class DataOutputThread(ProcessingThread):
         self.zmq_socket = self.zmq_context.socket(zmq.PUSH)
         self.zmq_socket.connect(self.zmq_ip_addr)
         self.save_vehicle_crops = save_vehicle_crops
+        self.track_counter = 0
 
         self.data_to_store = []
 
@@ -488,16 +489,17 @@ class DataOutputThread(ProcessingThread):
 
         track_feats = {}
 
-        for track_id, track in data["tracks"].items():
+        for _, track in data["tracks"].items():
             if track["status"] in {"new", "detected"}:
 
                 if not "height" in track: # cars
+                    self.track_counter += 1
                     meta = {
-                        "track_id": int(track_id),
+                        "track_id": int(self.track_counter),
                         "frame_id": track["frame_id"],
                         "position": track["position"],
                         "confidence": float(track["score"]),
-                        "crop_path": f"vehicle_{track_id}.jpg" if self.save_vehicle_crops else None
+                        "crop_path": f"vehicle_{self.track_counter}.jpg" if self.save_vehicle_crops else None
                     }
                     track_feats[meta["track_id"]] = [
                         float(x) for x in (track["feature"] if "feature" in track.keys() else [])
@@ -507,7 +509,7 @@ class DataOutputThread(ProcessingThread):
                         vehicle_crop_np = track["crop"] if "crop" in track.keys() else None
                         if vehicle_crop_np is not None:
                             vehicle_crop = cv2.cvtColor(vehicle_crop_np, cv2.COLOR_RGB2BGR)
-                            cv2.imwrite(os.path.join(self.output_dir, "vehicle_crops", f"vehicle_{track_id}.jpg"), vehicle_crop)
+                            cv2.imwrite(os.path.join(self.output_dir, "vehicle_crops", f"vehicle_{self.track_counter}.jpg"), vehicle_crop)
 
                     with open(meta_file_path, 'a') as csv_file:
                         writer = csv.writer(csv_file)
