@@ -41,7 +41,8 @@ class BaseTracker:
             new_tracks[self._next_track_id] = {
                 "bb": [detection],
                 "class": detection[4],
-                "frame_id": [frame_id], 
+                "frame_id": [frame_id],
+                "score": detection[5],
             }
             self._next_track_id += 1
         self._init_new_trackers(frame, new_tracks)
