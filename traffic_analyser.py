@@ -35,7 +35,6 @@ import hydra
 
 STATUS_BAR_HEIGHT = 30
 QUEUE_SIZE = 256
-DETECTOR_SCALE_FACTOR = 0.25
 
 VIAN_TOKEN = "VRASSEO_ISPANHEL_TEST"
 VIAN_SERVER_URL = "https://vian-dev.fit.vutbr.cz/vian_sensingapi/"
@@ -569,7 +568,7 @@ def main(cfg: DictConfig) -> None:
         detector = ObjectDetectorThread(cfg.detection.model, reader.queue, detections_output_queue,
                                         gpu_mem=cfg.detection.gpu_mem,
                                         allow_growth=True,  #TODO: nastavit z parametrů??
-                                        detector_scale_factor=DETECTOR_SCALE_FACTOR,
+                                        detector_scale_factor=cfg.detection.scale_factor,
                                         threshold=cfg.detection.threshold)
 
         all_threads.append(detector)
