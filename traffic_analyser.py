@@ -14,7 +14,7 @@ import os
 import json
 import zmq
 import sys
-import pickle
+import h5py
 import csv
 
 from tensorflow.keras.layers import DepthwiseConv2D, ReLU
@@ -480,90 +480,27 @@ class DataOutputThread(ProcessingThread):
         if self.save_vehicle_crops:
             ensure_dir(os.path.join(self.output_dir, "vehicle_crops"))
 
-        # headers = {k: str(type(v)) for k,v in data.items()}
+        meta_file_path = os.path.join(self.output_dir, 'track_meta.csv')
 
-        headers = dict()
-        # headers["frame_id"] = "int"
-        headers["frame_ts"] = "float"
-        headers["obj_track_id"] = "int"
-        headers["obj_track_status"] = "string"
-        headers["obj_class"] = "string"
-        headers["obj_class_score"] = "float"
-        headers["obj_bbox"] = "int[4]" #x1, y1, x2, y2
-        headers["obj_bbox_score"] = "float"
-        headers["obj_position"] = "int[2]" #x, y
-        headers["obj_is_moving"] = "bool"
-        headers["obj_speed"] = "float"
-        headers["obj_speed_px"] = "float"
-        headers["obj_height"] = "float"
-        headers["obj_height_px"] = "float"
-        headers["obj_feature_vector"] = "float[128]"
-        headers["veh_class"] = "string"
-        headers["veh_class_prob"] = "float"
-        headers["veh_model"] = "string"
-        headers["veh_model_prob"] = "float"
-        headers["veh_color_class"] = "string"
-        headers["veh_color_class_prob"] = "float"
+        if not os.path.exists(meta_file_path):
+            with open(meta_file_path, 'w') as csv_file:
+                writer = csv.writer(csv_file)
+                writer.writerow(["track_id", "frame_id", "position", "confidence", "crop_path"])
 
         track_feats = {}
 
         for track_id, track in data["tracks"].items():
-            # if track["in_roi"] and track["status"] in {"new", "detected"}:
             if track["status"] in {"new", "detected"}:
-                frame = np.ascontiguousarray(data["frame"][:, :, ::-1])
 
-                data_to_send = dict()
-                # data_to_send["frame_id"] = int(data["frame_id"])
-                data_to_send["frame_ts"] = int(data["frame_ts"])
-                #class 1 - Car, 2 - person
-                data_to_send["obj_class"] = "car" if int(track["class"]) == 1 else "person"
-                data_to_send["obj_class_score"] = 0.0 # TODO: vzít skore z detektoru
-
-                # trajectory
-                data_to_send["obj_track_id"] = int(track_id)
-                data_to_send["obj_track_status"] = track["status"]
-
-                # detection
-                boxes = np.round(np.asarray(track["bb"])[:, 0:4] * np.array(
-                    [[frame.shape[1], frame.shape[0], frame.shape[1], frame.shape[0]]]))
-                x1, y1, x2, y2 = boxes[-1].astype(int)
-                data_to_send["obj_bbox"] = [int(x1), int(y1), int(x2), int(y2)]
-                data_to_send["obj_bbox_score"] = 0.0 # TODO: vzít skore z detektoru
-
-                # position, is_moving, speed
-                data_to_send["obj_position"] = [int(x) for x in track["position"]] #list(np.asarray(track["position"]).astype(int32))
-                data_to_send["obj_is_moving"] = int(track["is_moving"])
-                # TODO: Speed - přepočítat na reálnou rychlost, pokud je kalibrace, jinak 0.
-                # data_to_send["speed"] = float(track["speed"]) if track["movement"] is not None else 0.0
-                data_to_send["obj_speed"] = 0.0
-                data_to_send["obj_speed_px"] = float(track["speed"]) if track["movement"] is not None else 0.0
-
-                if "height" in track: # persons
-                    data_to_send["obj_height"] = float(track["height"] / 100.0) # cm to m
-                    data_to_send["veh_class"] = None
-                    data_to_send["veh_class_prob"] = 0.0
-                    data_to_send["veh_model"] = None
-                    data_to_send["veh_model_prob"] = 0.0
-                    data_to_send["veh_color_class"] = None
-                    data_to_send["veh_color_class_prob"] = 0.0
-                    data_to_send["obj_feature_vector"] = [float(x) for x in track["feature"]]
-
-                else: # cars
-
-                    # classifications
-                    vehicle_type, vehicle_type_p = track["classification"]
-                    vehicle_color, vehicle_color_p = track["color"]
-
-                    data_to_send["height"] = 0.0 #TODO: Naplnit, pokud bude kalibrace a 3DBB?
-                    data_to_send["veh_class"] = "car" #TODO: Dodělat, jakmile budou typy vozidel (auto,dodávka,atd.)
-                    data_to_send["veh_class_prob"] = 1.0 #float(vehicle_type_p)
-                    data_to_send["veh_model"] = vehicle_type
-                    data_to_send["veh_model_prob"] = float(vehicle_type_p)
-                    data_to_send["veh_color_class"] = vehicle_color
-                    data_to_send["veh_color_class_prob"] = float(vehicle_color_p)
-                    data_to_send["obj_feature_vector"] = [float(x) for x in track["feature"]]
-
-                    track_feats[f"vehicle_{track_id}"] = [
+                if not "height" in track: # cars
+                    meta = {
+                        "track_id": int(track_id),
+                        "frame_id": track["frame_id"],
+                        "position": track["position"],
+                        "confidence": float(track["score"]),
+                        "crop_path": f"vehicle_{track_id}.jpg" if self.save_vehicle_crops else None
+                    }
+                    track_feats[meta["track_id"]] = [
                         float(x) for x in (track["feature"] if "feature" in track.keys() else [])
                     ]
 
@@ -573,47 +510,23 @@ class DataOutputThread(ProcessingThread):
                             vehicle_crop = cv2.cvtColor(vehicle_crop_np, cv2.COLOR_RGB2BGR)
                             cv2.imwrite(os.path.join(self.output_dir, "vehicle_crops", f"vehicle_{track_id}.jpg"), vehicle_crop)
 
-                DATA_LIMIT = 10000
-                #self.zmq_socket.send_json({"header": headers, "data" : data_to_send})
-                if len(self.data_to_store) < DATA_LIMIT:
-                    self.data_to_store.append({"vian_token": VIAN_TOKEN, "vian_server_url": VIAN_SERVER_URL, "vian_project_id": VIAN_PROJECT_ID, "header": headers, "data" : data_to_send})
+                    with open(meta_file_path, 'a') as csv_file:
+                        writer = csv.writer(csv_file)
+                        writer.writerow(list(meta.values()))
 
-                if len(self.data_to_store) == DATA_LIMIT:
-                    with open(os.path.join(self.output_dir, "queue_data.pkl"),"wb") as f:
-                        pickle.dump(self.data_to_store,f)
-                        sys.exit(1)
-                del data_to_send
+        with h5py.File(os.path.join(self.output_dir, 'features.h5'), 'a') as f:
+            if "track_ids" not in f:
+                f.create_dataset("track_ids", data=list(track_feats.keys()), maxshape=(None,), chunks=True)
+                f.create_dataset("features", data=list(track_feats.values()), maxshape=(None, 128), chunks=True)
+            else:
+                n = len(f['track_ids'])
+                new_track_ids = list(track_feats.keys())
+                new_features = list(track_feats.values())
 
-        with open(os.path.join(self.output_dir, 'track_feats.csv'), 'a') as csv_file:
-            writer = csv.writer(csv_file)
-            for key, value in track_feats.items():
-                writer.writerow([key, value])
-
-        # self.zmq_socket.send_json(headers)
-        # pass
-        # frame = data["frame"]
-        # for track_id, track in data["tracks"].items():
-        #     if int(track["class"]) == 1:  # only vehicles
-        #         if track["status"] in {"new", "detected"} and track["in_roi"]:
-        #             bb = np.round(np.asarray(track["bb"])[-1, 0:4] * np.array(
-        #                 [frame.shape[1], frame.shape[0], frame.shape[1], frame.shape[0]])).astype(int)
-        #             padding = int((bb[2] - bb[0]) * 0.10)
-        #             bb = bb + [-padding, -padding, padding, padding]
-        #             x1, x2 = np.clip(bb[[0, 2]], 0, frame.shape[1])
-        #             y1, y2 = np.clip(bb[[1, 3]], 0, frame.shape[0])
-        #             if track_id not in self.crops:
-        #                 self.crops[track_id] = []
-        #                 self.features[track_id] = []
-        #             self.crops[track_id].append(np.ascontiguousarray(frame[y1:y2, x1:x2, ::-1]))
-        #             self.features[track_id].append(data["features"][track_id])
-        #         elif track["status"] == "terminated" and track_id in self.crops:
-        #             if len(self.features[track_id]) > 5:
-        #                 mean_feature = np.mean(self.features[track_id], axis=0)
-        #                 middle_crop = self.crops[track_id][len(self.crops[track_id]) // 4]
-        #                 cv2.imwrite(os.path.join(self.output_dir, "track_%06d.jpg" % track_id), middle_crop)
-        #                 save_np_cache(os.path.join(self.output_dir, "track_%06d.npy" % track_id), mean_feature)
-        #             del self.crops[track_id]
-        #             del self.features[track_id]
+                f["features"].resize((n + len(new_features), 128))
+                f["features"][n:] = new_features
+                f["track_ids"].resize((n + len(new_track_ids),))
+                f["track_ids"][n:] = new_track_ids
 
 
 def main(cfg: DictConfig) -> None:
@@ -630,7 +543,8 @@ def main(cfg: DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))  # Vypište konfiguraci
 
     # experiment path: year_month/day/hour/minute
-    experiment_path = datetime.now().strftime(f"{cfg.output.data_dir}/%Y_%m/%d/%H/%M/")
+    camera_name = cfg.video.source.split("/")[-1].split(".")[0]
+    experiment_path = datetime.now().strftime(f"{cfg.output.data_dir}/{camera_name}/%Y_%m/%d/%H/%M/")
     ensure_dir(experiment_path)
 
     all_queues = []
