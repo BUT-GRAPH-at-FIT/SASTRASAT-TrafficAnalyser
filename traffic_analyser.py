@@ -138,6 +138,7 @@ class ClassificationThread(ProcessingThread):
         # TODO: Upravit tak, aby se vzali detekce ze všech tracků, provedlo se rozpoznání a pak se přiradilo na základě ID tracku ke správným trackům
         frame = data["frame"]
         vehicle_crops = []
+        vehicle_loose_crops = []
         vehicle_track_ids = []
         peds_crops = []
         peds_track_ids = []
@@ -147,12 +148,23 @@ class ClassificationThread(ProcessingThread):
                 bb = np.asarray(track["bb"])[-1, 0:4]
                 bb = np.round(bb * np.array([frame.shape[1], frame.shape[0], frame.shape[1], frame.shape[0]]))
                 x1, y1, x2, y2 = bb.astype(np.int32)
+
+                pad_portion = 0.15
+                bb_w, bb_h = (x2 - x1, y2 - y1)
+                bb_pad_x, bb_pad_y = int(bb_w * pad_portion), int(bb_h * pad_portion)
+
                 crop = frame[y1:y2, x1:x2, :]
                 crop = cv2.resize(crop, self.image_size)
+
+                y1, y2, x1, x2 = (max(y1 - bb_pad_y, 0), max(y2 + bb_pad_y, 0),
+                                  max(x1 - bb_pad_x, 0), max(x2 + bb_pad_x, 0))
+                loose_crop = frame[y1:y2, x1:x2, :]
+                loose_crop = cv2.resize(loose_crop, self.image_size)
 
                 if track["class"] == 1: # class 1 - vehicle
                     vehicle_crops.append(crop)
                     vehicle_track_ids.append(track_id)
+                    vehicle_loose_crops.append(loose_crop)
                 elif track["class"] == 2:
                     peds_crops.append(crop)
                     peds_track_ids.append(track_id)
@@ -180,7 +192,7 @@ class ClassificationThread(ProcessingThread):
                 data["tracks"][track_id]["feature"] = feat
 
                 if self.collect_vehicle_crops:
-                    data["tracks"][track_id]["crop"] = vehicle_crops[idx]
+                    data["tracks"][track_id]["crop"] = vehicle_loose_crops[idx]
 
         if len(peds_crops) > 0:
             np_crops = np.asarray(peds_crops)
