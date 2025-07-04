@@ -467,7 +467,7 @@ class DataOutputThread(ProcessingThread):
         self.zmq_socket = self.zmq_context.socket(zmq.PUSH)
         self.zmq_socket.connect(self.zmq_ip_addr)
         self.save_vehicle_crops = save_vehicle_crops
-        self.track_counter = 0
+        self.record_counter = 0
 
         self.data_to_store = []
 
@@ -485,7 +485,7 @@ class DataOutputThread(ProcessingThread):
         if not os.path.exists(meta_file_path):
             with open(meta_file_path, 'w') as csv_file:
                 writer = csv.writer(csv_file)
-                writer.writerow(["track_id", "frame_id", "position", "confidence", "crop_path"])
+                writer.writerow(["record_id", "track_id", "frame_id", "position", "confidence", "crop_path"])
 
         track_feats = {}
 
@@ -493,23 +493,27 @@ class DataOutputThread(ProcessingThread):
             if track["status"] in {"new", "detected"}:
 
                 if not "height" in track: # cars
-                    self.track_counter += 1
+                    self.record_counter += 1
+
+                    crop_path = f"crop_{track['track_id']}_{self.record_counter}.jpg"
                     meta = {
-                        "track_id": int(self.track_counter),
-                        "frame_id": track["frame_id"],
+                        "record_id": self.record_counter,
+                        "track_id": track["track_id"],
+                        "frame_id": track["frame_id"][-1],
                         "position": track["position"],
                         "confidence": float(track["score"]),
-                        "crop_path": f"vehicle_{self.track_counter}.jpg" if self.save_vehicle_crops else None
+                        "crop_path": crop_path if self.save_vehicle_crops else None
                     }
-                    track_feats[meta["track_id"]] = [
-                        float(x) for x in (track["feature"] if "feature" in track.keys() else [])
-                    ]
+                    track_feats[meta["record_id"]] = list(track["feature"])
 
                     if self.save_vehicle_crops:
                         vehicle_crop_np = track["crop"] if "crop" in track.keys() else None
                         if vehicle_crop_np is not None:
                             vehicle_crop = cv2.cvtColor(vehicle_crop_np, cv2.COLOR_RGB2BGR)
-                            cv2.imwrite(os.path.join(self.output_dir, "vehicle_crops", f"vehicle_{self.track_counter}.jpg"), vehicle_crop)
+                            cv2.imwrite(
+                                os.path.join(self.output_dir, "vehicle_crops", crop_path),
+                                vehicle_crop
+                            )
 
                     with open(meta_file_path, 'a') as csv_file:
                         writer = csv.writer(csv_file)
