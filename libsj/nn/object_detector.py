@@ -46,8 +46,8 @@ class ObjectDetector:
         assert frame.ndim == 3
         # speed up detection by scaling
         if self.scale_factor is not None:
-            if frame.shape[0] * self.scale_factor > 300:
-                self.scale_factor = 300 / frame.shape[0]
+            if self.scale_factor > 1:
+                self.scale_factor = self.scale_factor / frame.shape[0]
 
             frame = cv2.resize(frame,(0,0),fx=self.scale_factor, fy=self.scale_factor, interpolation=cv2.INTER_AREA)
         if threshold is None:

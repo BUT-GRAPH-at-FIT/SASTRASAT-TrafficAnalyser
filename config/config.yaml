@@ -23,7 +23,7 @@ detection:
   model: models/detectors/vehicle_peds_ssd_mobilenet/frozen_inference_graph.pb # "path_to_frozen_graph"
   gpu_mem: 0.7
   threshold: 0.4
-  scale_factor: 0.25
+  scale_factor: 225
 
 tracker:
   type: IoU
