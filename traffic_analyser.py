@@ -142,6 +142,7 @@ class ClassificationThread(ProcessingThread):
         vehicle_track_ids = []
         peds_crops = []
         peds_track_ids = []
+        crop_sizes = []
         for track_id, track in data["tracks"].items():
 
             if track["status"] in {"new", "detected"}:
@@ -160,6 +161,8 @@ class ClassificationThread(ProcessingThread):
                                   max(x1 - bb_pad_x, 0), max(x2 + bb_pad_x, 0))
                 loose_crop = frame[y1:y2, x1:x2, :]
                 loose_crop = cv2.resize(loose_crop, self.image_size)
+
+                crop_sizes.append((bb_w, bb_h))
 
                 if track["class"] == 1: # class 1 - vehicle
                     vehicle_crops.append(crop)
@@ -190,6 +193,7 @@ class ClassificationThread(ProcessingThread):
                 data["tracks"][track_id]["classification"] = classification
                 data["tracks"][track_id]["color"] = color
                 data["tracks"][track_id]["feature"] = feat
+                data["tracks"][track_id]["bb_size"] = crop_sizes[idx]
 
                 if self.collect_vehicle_crops:
                     data["tracks"][track_id]["crop"] = vehicle_loose_crops[idx]
@@ -497,7 +501,7 @@ class DataOutputThread(ProcessingThread):
         if not os.path.exists(meta_file_path):
             with open(meta_file_path, 'w') as csv_file:
                 writer = csv.writer(csv_file)
-                writer.writerow(["record_id", "track_id", "frame_id", "position", "confidence", "crop_path"])
+                writer.writerow(["record_id", "track_id", "frame_id", "position", "confidence", "bb_size", "crop_path"])
 
         track_feats = {}
 
@@ -514,6 +518,7 @@ class DataOutputThread(ProcessingThread):
                         "frame_id": track["frame_id"][-1],
                         "position": track["position"],
                         "confidence": float(track["score"]),
+                        "bb_size": track["bb_size"],
                         "crop_path": crop_path if self.save_vehicle_crops else None
                     }
                     track_feats[meta["record_id"]] = list(track["feature"])
