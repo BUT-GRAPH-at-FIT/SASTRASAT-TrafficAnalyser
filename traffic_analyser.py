@@ -574,7 +574,7 @@ def main(cfg: DictConfig) -> None:
     try:
         # READER
         reader = VideoReader(cfg.video.source,
-                             frame_step=cfg.video.frame_step,
+                             max_fps=cfg.video.max_fps,
                              skip_frames=cfg.video.skip_frames,
                              take_frames=cfg.video.take_frames,
                              queue_max_size=QUEUE_SIZE,
@@ -649,7 +649,7 @@ def main(cfg: DictConfig) -> None:
             height, width = reader.frame_shape[0:2]
             video_path = os.path.join(experiment_path, cfg.output.video_output.file)
             video_output = VideoWriter(video_path, width, height + STATUS_BAR_HEIGHT, codec="mpeg4",
-                                       fps=15, input_queue=draw_output_queue, swap_channels=True)
+                                       fps=cfg.video.max_fps, input_queue=draw_output_queue, swap_channels=True)
         all_threads.append(video_output)
 
         # DATA OUTPUT

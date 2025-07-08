@@ -15,7 +15,7 @@ app:
 
 video:
   source: null # "path_to_video_file_or_rtsp_stream"
-  frame_step: 1
+  max_fps: 25
   skip_frames: 0
   take_frames: null
 
@@ -40,7 +40,7 @@ extractor:
 output:
   data_dir: outputs # "path_to_output_dir"
   save_crops: True
-  video_output: 
+  video_output:
     file: processed_file.mp4
     codec: mpeg4
     fps: 15
