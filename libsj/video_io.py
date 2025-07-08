@@ -13,14 +13,14 @@ import time
 
 # TODO pyav has bug that it returns one frame less than there actually is in the video file
 class VideoReader(BaseThread):
-    def __init__(self, video_path, frame_step=1, skip_frames=0, take_frames=None, video_ind=0, queue_max_size=128, av_options=None, name="VideoReader"):
+    def __init__(self, video_path, max_fps=25, skip_frames=0, take_frames=None, video_ind=0, queue_max_size=128, av_options=None, name="VideoReader"):
         super().__init__(name)
         self.queue = Queue(queue_max_size)
         self.video_ind = video_ind
         self.video_path = video_path
         logging.info("Opening video file: %s"%video_path)
         self.container = av.open(video_path, options=av_options)
-        self.frame_step = frame_step
+        self.frame_step = int(round((1 / self.fps) / max_fps)) if max_fps > 0 else 1
         self.take_frames = take_frames
         if self.take_frames is not None:
             assert self.take_frames > 0
@@ -53,6 +53,7 @@ class VideoReader(BaseThread):
     @property
     def fps(self):
         rate = self.container.streams.video[self.video_ind].average_rate
+
         if (rate == 0) or (rate is None):
             return 0
         else:
