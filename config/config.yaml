@@ -36,6 +36,7 @@ classification:
 
 extractor:
   model: models/feature_extractors/vehicle_MobileNet_AIC_128dim/ # "path_to_keras_model"
+  batch_size: 128
 
 output:
   data_dir: outputs # "path_to_output_dir"
