@@ -396,13 +396,9 @@ class DrawThread(ProcessingThread):
                                  background_color=color, text_color=text_color, padding=3,
                                  font_scale=0.4, font_thickness=1, font=cv2.FONT_HERSHEY_SIMPLEX)
                 else: # cars
-                    # classifications
-                    vehicle_type, vehicle_type_p = track["classification"]
-                    vehicle_color, vehicle_color_p = track["color"]
-
                     text_color = (0,0,0)
-                    cv_draw_text(frame, "ID:%04d, Type: %s (%.02f), Color: %s (%.02f)" %
-                                 (track_id, vehicle_type, vehicle_type_p, vehicle_color, vehicle_color_p),
+                    cv_draw_text(frame,
+                                 "ID:%04d" % track_id,
                                  (x1 + 1, y1),
                                  background_color=color, text_color=text_color, padding=3,
                                  font_scale=0.4, font_thickness=1, font=cv2.FONT_HERSHEY_SIMPLEX)
