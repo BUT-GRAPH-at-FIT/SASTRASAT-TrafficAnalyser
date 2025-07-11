@@ -584,7 +584,8 @@ def main(cfg: DictConfig) -> None:
         # CLASSIFIER
         classifier_output_queue = Queue(QUEUE_SIZE)
         classifier = ClassificationThread(cfg.classification.mmr_model, cfg.classification.color_model, cfg.extractor.model,
-                                          tracker_output_queue, classifier_output_queue, collect_vehicle_crops=cfg.output.save_crops)
+                                          tracker_output_queue, classifier_output_queue, max_batch_size=cfg.extractor.batch_size,
+                                          collect_vehicle_crops=cfg.output.save_crops)
         all_threads.append(classifier)
         all_queues.append(("analyser_in", classifier_output_queue))
         # all_queues.append(("splitter_in", classifier_output_queue))
