@@ -73,7 +73,7 @@ class ClassificationThread(ProcessingThread):
 
     # def __init__(self, model_path, input_queue, output_queue, name="Classifier"):
     def __init__(self, model_path, color_model_path, extractor_model_path, input_queue, output_queue,
-                 collect_vehicle_crops=False, name="Classifier"):
+                 max_batch_size=32, collect_vehicle_crops=False, name="Classifier"):
         super().__init__(input_queue, output_queue, name)
         self.model_path = model_path
         self.color_model_path = color_model_path
@@ -83,6 +83,7 @@ class ClassificationThread(ProcessingThread):
         config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True
         self.keras_session = tf.compat.v1.Session(config=config)
+        self.max_batch_size = max_batch_size
         set_session(self.keras_session)
 
     def init_thread(self):
@@ -140,12 +141,11 @@ class ClassificationThread(ProcessingThread):
         vehicle_crops = []
         vehicle_loose_crops = []
         vehicle_track_ids = []
-        peds_crops = []
-        peds_track_ids = []
         crop_sizes = []
+
         for track_id, track in data["tracks"].items():
 
-            if track["status"] in {"new", "detected"}:
+            if track["status"] in {"new", "detected"} and track["class"] == 1:
                 bb = np.asarray(track["bb"])[-1, 0:4]
                 bb = np.round(bb * np.array([frame.shape[1], frame.shape[0], frame.shape[1], frame.shape[0]]))
                 x1, y1, x2, y2 = bb.astype(np.int32)
@@ -164,52 +164,24 @@ class ClassificationThread(ProcessingThread):
 
                 crop_sizes.append((bb_w, bb_h))
 
-                if track["class"] == 1: # class 1 - vehicle
-                    vehicle_crops.append(crop)
-                    vehicle_track_ids.append(track_id)
-                    vehicle_loose_crops.append(loose_crop)
-                elif track["class"] == 2:
-                    peds_crops.append(crop)
-                    peds_track_ids.append(track_id)
-
+                vehicle_crops.append(crop)
+                vehicle_track_ids.append(track_id)
+                vehicle_loose_crops.append(loose_crop)
 
         if len(vehicle_crops) > 0:
             np_crops = np.asarray(vehicle_crops)
             np_crops = (np_crops.astype(np.float32) - 116.0) / 128.0
-            predictions = self.model.predict(np_crops, batch_size=16)
-
-            # Car classification
-            color_predictions = self.color_model.predict(np_crops, batch_size=16)
 
             # extract feautres from vehicles
-            feats = self.vehicle_extractor.predict(np_crops, batch_size=16)
+            feats = self.vehicle_extractor.predict(np_crops, batch_size=self.max_batch_size)
             feats /= np.linalg.norm(feats, axis=1, keepdims=True)
 
-            for idx, (track_id, pred, color_pred, feat) in enumerate(zip(vehicle_track_ids, predictions, color_predictions, feats)):
-                ind = np.argmax(pred)
-                classification = (self.mapping[ind], pred[ind])
-                ind = np.argmax(color_pred)
-                color = (self.color_mapping[ind], color_pred[ind])
-                data["tracks"][track_id]["classification"] = classification
-                data["tracks"][track_id]["color"] = color
+            for idx, (track_id, feat) in enumerate(zip(vehicle_track_ids, feats)):
                 data["tracks"][track_id]["feature"] = feat
                 data["tracks"][track_id]["bb_size"] = crop_sizes[idx]
 
                 if self.collect_vehicle_crops:
                     data["tracks"][track_id]["crop"] = vehicle_loose_crops[idx]
-
-        if len(peds_crops) > 0:
-            np_crops = np.asarray(peds_crops)
-            np_crops = (np_crops.astype(np.float32) - 116.0) / 128.0
-
-            #TODO: extract feautres from vehicles
-            feats = self.vehicle_extractor.predict(np_crops, batch_size=16)
-            feats /= np.linalg.norm(feats, axis=1, keepdims=True)
-
-            for track_id, feat in zip(peds_track_ids, feats):
-                data["tracks"][track_id]["classification"] = None
-                data["tracks"][track_id]["color"] = None
-                data["tracks"][track_id]["feature"] = feat
         return data
 
     def finalize_thread(self):
