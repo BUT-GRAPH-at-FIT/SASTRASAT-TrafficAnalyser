@@ -1,0 +1,9 @@
+logging==0.4.9.6
+opencv-python==4.11.0.86
+h5py==3.14.0
+torch==2.7.1
+tqdm==4.67.1
+matplotlib==3.10.3
+matplotlib-inline==0.1.7
+scikit-learn==1.7.0
+numpy==2.3.1
