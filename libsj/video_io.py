@@ -11,6 +11,35 @@ import numpy as np
 from queue import Queue, Full, Empty
 import time
 
+crop_dict = {
+    #             left, right  top, bottom
+    "JS-BM-P487": ((450, 20), (650, 20)),
+    "JK-CE-P571": ((20, 20), (150, 20)),
+    "JS-BM-P488": ((20, 20), (220, 130)),
+    "JS-BM-P489": ((20, 20), (300, 130)),
+    "JS-BM-P490": ((20, 150), (400, 20)),
+    "JS-BM-P491": ((20, 250), (250, 20)),
+    "JS-BM-P493": ((20, 150), (200, 20)),
+    "JS-BM-P4951": ((20, 20), (120, 20)),
+    "JS-BM-P498": ((20, 20), (300, 130)),
+    "JS-CM-P492": ((20, 20), (250, 130)),
+    "JU-PO-P573": ((20, 70), (150, 20)),
+    "PJ-CE-P551": ((20, 20), (300, 20)),
+    "SD-PO-P576": ((20, 20), (200, 20)),
+    "SG-CE-P574": ((20, 20), (135, 20)),
+    "SU-CE-P575": ((20, 20), (150, 20)),
+}
+
+def _select_crop(video_path):
+    crop = ((20, 20), (20, 20))
+
+    for key in crop_dict.keys():
+        if video_path.split("/")[-1].startswith(key):
+            crop = crop_dict[key]
+            break
+
+    return crop
+
 # TODO pyav has bug that it returns one frame less than there actually is in the video file
 class VideoReader(BaseThread):
     def __init__(self, video_path, max_fps=25, skip_frames=0, take_frames=None, video_ind=0, queue_max_size=128, av_options=None, name="VideoReader"):
@@ -18,6 +47,7 @@ class VideoReader(BaseThread):
         self.queue = Queue(queue_max_size)
         self.video_ind = video_ind
         self.video_path = video_path
+        self.horizontal_crop, self.vertical_crop = _select_crop(video_path)
         logging.info("Opening video file: %s"%video_path)
         self.container = av.open(video_path, options=av_options)
         self.frame_step = int(round((1 / self.fps) / max_fps)) if max_fps > 0 else 1
@@ -82,6 +112,13 @@ class VideoReader(BaseThread):
                 # ts = float(frame_raw.pts * self._time_base) if frame_raw.pts is not None else 0
                 ts = int(frame_raw.pts) if frame_raw.pts is not None else 0
                 frame = np.array(frame_raw.to_image())
+
+                # crop the best camera view
+                frame = frame[
+                    self.vertical_crop[0]:-self.vertical_crop[1],
+                    self.horizontal_crop[0]:-self.horizontal_crop[1],
+                ]
+
                 self.submit((frame_id, frame, ts, frame_raw.is_corrupt))
             if self.stopped:
                 return
