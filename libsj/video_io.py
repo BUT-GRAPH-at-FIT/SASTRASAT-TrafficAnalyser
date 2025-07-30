@@ -50,7 +50,7 @@ class VideoReader(BaseThread):
         self.horizontal_crop, self.vertical_crop = _select_crop(video_path)
         logging.info("Opening video file: %s"%video_path)
         self.container = av.open(video_path, options=av_options)
-        self.frame_step = int(round((1 / self.fps) / max_fps)) if max_fps > 0 else 1
+        self.frame_step = max(1, int(round((1 / self.fps) / max_fps))) if max_fps > 0 else 1
         self.take_frames = take_frames
         if self.take_frames is not None:
             assert self.take_frames > 0
