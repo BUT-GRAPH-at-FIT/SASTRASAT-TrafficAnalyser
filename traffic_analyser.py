@@ -479,7 +479,7 @@ class DataOutputThread(ProcessingThread):
                 if not "height" in track: # cars
                     self.record_counter += 1
 
-                    crop_path = f"crop_{track['track_id']}_{self.record_counter}.jpg"
+                    crop_path = f"{track['track_id']}/crop_{self.record_counter}.jpg"
                     meta = {
                         "record_id": self.record_counter,
                         "track_id": track["track_id"],
@@ -494,6 +494,9 @@ class DataOutputThread(ProcessingThread):
                     if self.save_vehicle_crops:
                         vehicle_crop_np = track["crop"] if "crop" in track.keys() else None
                         if vehicle_crop_np is not None:
+                            if not os.path.exists(os.path.join(self.output_dir, "vehicle_crops", str(track['track_id']))):
+                                os.makedirs(os.path.join(self.output_dir, "vehicle_crops", str(track['track_id'])))
+
                             vehicle_crop = cv2.cvtColor(vehicle_crop_np, cv2.COLOR_RGB2BGR)
                             cv2.imwrite(
                                 os.path.join(self.output_dir, "vehicle_crops", crop_path),
