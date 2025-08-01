@@ -87,53 +87,10 @@ class ClassificationThread(ProcessingThread):
         set_session(self.keras_session)
 
     def init_thread(self):
-        self.model = load_model(os.path.join(self.model_path, "final_model.h5"),
-                                custom_objects={'relu6': ReLU(6.), 'DepthwiseConv2D': DepthwiseConv2D}, compile=False)
-        self.color_model = load_model(os.path.join(self.color_model_path, "final_model.h5"),
-                                      custom_objects={'relu6': ReLU(6.), 'DepthwiseConv2D': DepthwiseConv2D}, compile=False)
         self.extractor_model = load_model(os.path.join(self.extractor_model_path, "model.h5"),
                                       custom_objects={'relu6': ReLU(6.), 'DepthwiseConv2D': DepthwiseConv2D}, compile=False)
-
         self.vehicle_extractor = Model(self.extractor_model.input, self.extractor_model.layers[-1].output, name="Extractor")
-
-        self.image_size = (self.model.input_shape[2], self.model.input_shape[1])  # width, height
-        mapping = load_cache(os.path.join(self.model_path, "types_mapping.pkl"))
-        assert len(mapping) == self.model.output_shape[-1]
-        self.mapping = {v: k for k, v in mapping.items()}
-        mapping = load_cache(os.path.join(self.color_model_path, "colors_mapping.pkl"))
-        assert len(mapping) == self.color_model.output_shape[-1]
-        self.color_mapping = {v: k for k, v in mapping.items()}
-        assert self.model.input_shape == self.color_model.input_shape
-
-    # def process(self, data):
-    #     frame = data["frame"]
-    #     # crops = []
-    #     for track_id, track in data["tracks"].items():
-    #
-    #         if track["status"] in {"new", "detected"} and track["class"] == 1:
-    #             bb = np.asarray(track["bb"])[-1, 0:4]
-    #             bb = np.round(bb * np.array([frame.shape[1], frame.shape[0], frame.shape[1], frame.shape[0]]))
-    #             x1, y1, x2, y2 = bb.astype(np.int32)
-    #             crop = frame[y1:y2, x1:x2, :]
-    #             crop = cv2.resize(crop, self.image_size)
-    #             # crops.append(crop)
-    #
-    #             # if len(crops) > 0:
-    #             np_crops = np.asarray([crop])
-    #             np_crops = (np_crops.astype(np.float32) - 116.0) / 128.0
-    #             predictions = self.model.predict(np_crops, batch_size=16)
-    #             color_predictions = self.color_model.predict(np_crops, batch_size=16)
-    #             classifications = []
-    #             colors = []
-    #             for pred, color_pred in zip(predictions, color_predictions):
-    #                 ind = np.argmax(pred)
-    #                 classifications.append((self.mapping[ind], pred[ind]))
-    #                 ind = np.argmax(color_pred)
-    #                 colors.append((self.color_mapping[ind], color_pred[ind]))
-    #             track["classification"] = classifications[0]
-    #             track["color"] = colors[0]
-    #
-    #     return data
+        self.image_size = (self.extractor_model.input_shape[2], self.extractor_model.input_shape[1])  # width, height
 
     def process(self, data):
         # TODO: Upravit tak, aby se vzali detekce ze všech tracků, provedlo se rozpoznání a pak se přiradilo na základě ID tracku ke správným trackům
