@@ -15,20 +15,20 @@ app:
 
 video:
   source: null # "path_to_video_file_or_rtsp_stream"
-  max_fps: 25
+  max_fps: 15
   skip_frames: 0
   take_frames: null
 
 detection:
   model: models/detectors/vehicle_peds_ssd_mobilenet/frozen_inference_graph.pb # "path_to_frozen_graph"
   gpu_mem: 0.7
-  threshold: 0.4
+  threshold: 0.45
   scale_factor: 225
 
 tracker:
-  type: IoU
-  iou: 0.4
-  terminate_after: 5
+  type: DeepSort
+  iou: 0.80
+  terminate_after: 7
 
 classification:
   mmr_model: models/classifiers/classifier_frontal_ResNet50_2DBB # "path_to_keras_model"

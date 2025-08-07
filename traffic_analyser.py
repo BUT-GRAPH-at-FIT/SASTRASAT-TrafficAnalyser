@@ -22,7 +22,7 @@ from tensorflow.keras.models import load_model, Model
 from tensorflow.compat.v1.keras.backend import set_session
 
 from libsj.nn.object_detector import ObjectDetectorThread
-from libsj.tracking import TrackerThread, IoUTracker, KCFTracker
+from libsj.tracking import TrackerThread, IoUTracker, KCFTracker, DSTracker
 from libsj.plotting import cv_draw_text
 from libsj.video_io import VideoReader, VideoWriter
 from libsj.utils import setup_logging, load_cache, save_cache, EmptyContext, ensure_dir, save_np_cache, progress_bar#, point_line_distance, line_from_points,
@@ -97,33 +97,29 @@ class ClassificationThread(ProcessingThread):
         frame = data["frame"]
         vehicle_crops = []
         vehicle_loose_crops = []
-        vehicle_track_ids = []
         crop_sizes = []
 
-        for track_id, track in data["tracks"].items():
+        for detection in data["detections"]:
+            bb = np.asarray(detection)[0:4]
+            bb = np.round(bb * np.array([frame.shape[1], frame.shape[0], frame.shape[1], frame.shape[0]]))
+            x1, y1, x2, y2 = bb.astype(np.int32)
 
-            if track["status"] in {"new", "detected"} and track["class"] == 1:
-                bb = np.asarray(track["bb"])[-1, 0:4]
-                bb = np.round(bb * np.array([frame.shape[1], frame.shape[0], frame.shape[1], frame.shape[0]]))
-                x1, y1, x2, y2 = bb.astype(np.int32)
+            pad_portion = 0.15
+            bb_w, bb_h = (x2 - x1, y2 - y1)
+            bb_pad_x, bb_pad_y = int(bb_w * pad_portion), int(bb_h * pad_portion)
 
-                pad_portion = 0.15
-                bb_w, bb_h = (x2 - x1, y2 - y1)
-                bb_pad_x, bb_pad_y = int(bb_w * pad_portion), int(bb_h * pad_portion)
+            crop = frame[y1:y2, x1:x2, :]
+            crop = cv2.resize(crop, self.image_size)
 
-                crop = frame[y1:y2, x1:x2, :]
-                crop = cv2.resize(crop, self.image_size)
+            y1, y2, x1, x2 = (max(y1 - bb_pad_y, 0), max(y2 + bb_pad_y, 0),
+                              max(x1 - bb_pad_x, 0), max(x2 + bb_pad_x, 0))
+            loose_crop = frame[y1:y2, x1:x2, :]
+            loose_crop = cv2.resize(loose_crop, self.image_size)
 
-                y1, y2, x1, x2 = (max(y1 - bb_pad_y, 0), max(y2 + bb_pad_y, 0),
-                                  max(x1 - bb_pad_x, 0), max(x2 + bb_pad_x, 0))
-                loose_crop = frame[y1:y2, x1:x2, :]
-                loose_crop = cv2.resize(loose_crop, self.image_size)
+            crop_sizes.append((bb_w, bb_h))
 
-                crop_sizes.append((bb_w, bb_h))
-
-                vehicle_crops.append(crop)
-                vehicle_track_ids.append(track_id)
-                vehicle_loose_crops.append(loose_crop)
+            vehicle_crops.append(crop)
+            vehicle_loose_crops.append(loose_crop)
 
         if len(vehicle_crops) > 0:
             np_crops = np.asarray(vehicle_crops)
@@ -133,12 +129,13 @@ class ClassificationThread(ProcessingThread):
             feats = self.vehicle_extractor.predict(np_crops, batch_size=self.max_batch_size)
             feats /= np.linalg.norm(feats, axis=1, keepdims=True)
 
-            for idx, (track_id, feat) in enumerate(zip(vehicle_track_ids, feats)):
-                data["tracks"][track_id]["feature"] = feat
-                data["tracks"][track_id]["bb_size"] = crop_sizes[idx]
+            data["features"] = feats
+        else:
+            data["features"] = None
 
-                if self.collect_vehicle_crops:
-                    data["tracks"][track_id]["crop"] = vehicle_loose_crops[idx]
+        if self.collect_vehicle_crops:
+            data["crops"] = vehicle_loose_crops
+
         return data
 
     def finalize_thread(self):
@@ -464,19 +461,23 @@ class DataOutputThread(ProcessingThread):
                         writer = csv.writer(csv_file)
                         writer.writerow(list(meta.values()))
 
-        with h5py.File(os.path.join(self.output_dir, 'features.h5'), 'a') as f:
-            if "track_ids" not in f:
-                f.create_dataset("track_ids", data=list(track_feats.keys()), maxshape=(None,), chunks=True)
-                f.create_dataset("features", data=list(track_feats.values()), maxshape=(None, 128), chunks=True)
-            else:
-                n = len(f['track_ids'])
-                new_track_ids = list(track_feats.keys())
-                new_features = list(track_feats.values())
+        if len(track_feats) > 0:
+            with h5py.File(os.path.join(self.output_dir, 'features.h5'), 'a') as f:
+                if "track_ids" not in f:
+                    f.create_dataset("track_ids", data=list(track_feats.keys()), maxshape=(None,), chunks=True)
 
-                f["features"].resize((n + len(new_features), 128))
-                f["features"][n:] = new_features
-                f["track_ids"].resize((n + len(new_track_ids),))
-                f["track_ids"][n:] = new_track_ids
+                    print(f"Values: {track_feats.values()}")
+                    print(f"Features shape: {np.stack(list(track_feats.values())).shape}")
+                    f.create_dataset("features", data=list(track_feats.values()), maxshape=(None, 128), chunks=True)
+                else:
+                    n = len(f['track_ids'])
+                    new_track_ids = list(track_feats.keys())
+                    new_features = list(track_feats.values())
+
+                    f["features"].resize((n + len(new_features), 128))
+                    f["features"][n:] = new_features
+                    f["track_ids"].resize((n + len(new_track_ids),))
+                    f["track_ids"][n:] = new_track_ids
 
 
 def main(cfg: DictConfig) -> None:
@@ -523,7 +524,18 @@ def main(cfg: DictConfig) -> None:
                                         threshold=cfg.detection.threshold)
 
         all_threads.append(detector)
-        all_queues.append(("tracker_in", detections_output_queue))
+        all_queues.append(("classifier_in", detections_output_queue))
+
+        # CLASSIFIER
+        classifier_output_queue = Queue(QUEUE_SIZE)
+        classifier = ClassificationThread(cfg.classification.mmr_model, cfg.classification.color_model,
+                                          cfg.extractor.model,
+                                          detections_output_queue, classifier_output_queue,
+                                          max_batch_size=cfg.extractor.batch_size,
+                                          collect_vehicle_crops=cfg.output.save_crops)
+        all_threads.append(classifier)
+        all_queues.append(("tracker_in", classifier_output_queue))
+        # all_queues.append(("splitter_in", classifier_output_queue))
 
         # TRACKER
         tracker_output_queue = Queue(QUEUE_SIZE)
@@ -531,24 +543,17 @@ def main(cfg: DictConfig) -> None:
             tracker_impl = IoUTracker(cfg.tracker.iou, cfg.tracker.terminate_after)
         elif cfg.tracker.type == "KCF":
             tracker_impl = KCFTracker(cfg.tracker.iou, cfg.tracker.terminate_after)
+        elif cfg.tracker.type == "DeepSort":
+            tracker_impl = DSTracker(max_iou_distance=cfg.tracker.iou, max_age=cfg.tracker.terminate_after, n_init=2)
         else:
             raise ValueError("Unsupported tracker: '%s'" % cfg.tracker.type)
-        tracker = TrackerThread(tracker_impl, detections_output_queue, tracker_output_queue)
+        tracker = TrackerThread(tracker_impl, classifier_output_queue, tracker_output_queue)
         all_threads.append(tracker)
-        all_queues.append(("classifier_in", tracker_output_queue))
-
-        # CLASSIFIER
-        classifier_output_queue = Queue(QUEUE_SIZE)
-        classifier = ClassificationThread(cfg.classification.mmr_model, cfg.classification.color_model, cfg.extractor.model,
-                                          tracker_output_queue, classifier_output_queue, max_batch_size=cfg.extractor.batch_size,
-                                          collect_vehicle_crops=cfg.output.save_crops)
-        all_threads.append(classifier)
-        all_queues.append(("analyser_in", classifier_output_queue))
-        # all_queues.append(("splitter_in", classifier_output_queue))
+        all_queues.append(("analyser_in", tracker_output_queue))
 
         # ANALYSER
         analyser_output_queue = Queue(QUEUE_SIZE)
-        analyser = AnalyseThread(config, classifier_output_queue, analyser_output_queue, cfg.output.data_dir)
+        analyser = AnalyseThread(config, tracker_output_queue, analyser_output_queue, cfg.output.data_dir)
         # analyser = AnalyseThread(config, tracker_output_queue, analyser_output_queue, args.calibration_output)
         all_threads.append(analyser)
         all_queues.append(("splitter_in", analyser_output_queue))

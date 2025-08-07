@@ -12,6 +12,6 @@ class TrackerThread(ProcessingThread):
         self.tracker = tracker
         
     def process(self, data):
-        data["tracks"] = self.tracker.track(data["frame_id"], data["frame"], data["detections"])
+        data["tracks"] = self.tracker.track(data["frame_id"], data["frame"], data["detections"], data["crops"], data["features"])
         return data
         
