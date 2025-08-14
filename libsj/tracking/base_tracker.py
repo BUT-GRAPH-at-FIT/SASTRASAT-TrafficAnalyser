@@ -4,6 +4,8 @@ __license__ = "MIT"
 
 
 import copy
+import time
+
 from ..utils import bb_iou
 import numpy as np
 
@@ -16,6 +18,8 @@ class BaseTracker:
         
         
     def track(self, frame_id, frame, detections):
+        start_time = time.time()
+
         new_positions = self._predict_new_positions(frame)
         ###############
         # match tracks
@@ -67,6 +71,8 @@ class BaseTracker:
         for track_id in terminated_ids:
             del self._tracks[track_id]
         self._delete_terminated_tracks(terminated_ids)
+
+        print("BaseTracker time in ms: %.2f" % ((time.time() - start_time) * 1000))
         return return_data    
         
     

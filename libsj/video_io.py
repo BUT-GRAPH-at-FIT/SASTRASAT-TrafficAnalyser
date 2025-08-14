@@ -11,6 +11,7 @@ import numpy as np
 from queue import Queue, Full, Empty
 import time
 
+# TODO: Adjust for dynamic configuration
 crop_dict = {
     #             left, right  top, bottom
     "JS-BM-P487": ((450, 20), (650, 20)),

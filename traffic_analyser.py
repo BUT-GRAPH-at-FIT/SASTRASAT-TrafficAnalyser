@@ -16,6 +16,7 @@ import zmq
 import sys
 import h5py
 import csv
+import time
 
 from tensorflow.keras.layers import DepthwiseConv2D, ReLU
 from tensorflow.keras.models import load_model, Model
@@ -93,6 +94,8 @@ class ClassificationThread(ProcessingThread):
         self.image_size = (self.extractor_model.input_shape[2], self.extractor_model.input_shape[1])  # width, height
 
     def process(self, data):
+        start_time = time.time()
+
         # TODO: Upravit tak, aby se vzali detekce ze všech tracků, provedlo se rozpoznání a pak se přiradilo na základě ID tracku ke správným trackům
         frame = data["frame"]
         vehicle_crops = []
@@ -136,6 +139,7 @@ class ClassificationThread(ProcessingThread):
         if self.collect_vehicle_crops:
             data["crops"] = vehicle_loose_crops
 
+        print("ClassificationThread time in ms: ", (int((time.time() - start_time) * 1000)))
         return data
 
     def finalize_thread(self):

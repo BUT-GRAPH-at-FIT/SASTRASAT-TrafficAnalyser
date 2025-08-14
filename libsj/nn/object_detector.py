@@ -2,6 +2,7 @@ __author__ = "Jakub Sochor"
 __copyright__ = "Copyright 2018, Jakub Sochor"
 __license__ = "MIT"
 
+import time
 
 import tensorflow as tf
 import numpy as np
@@ -101,6 +102,8 @@ class ObjectDetectorThread(ProcessingThread):
         
     
     def process(self, data):
+        start_time = time.time()
+
         frame_id, frame, frame_ts, frame_corrupted = data # assume input from video reader
         boxes, classes, scores = self.detector.detect(frame, return_scores=True)
         data = {
@@ -110,6 +113,8 @@ class ObjectDetectorThread(ProcessingThread):
             "is_corrupted": frame_corrupted,
             "detections": np.hstack((boxes, classes.reshape(-1, 1), scores.reshape(-1, 1)))
         }
+
+        print("ObjectDetectorThread time in ms: %.2f" % ((time.time() - start_time) * 1000))
         return data
     
     def finalize_thread(self):

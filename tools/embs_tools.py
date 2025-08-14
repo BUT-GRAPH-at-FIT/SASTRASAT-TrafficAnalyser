@@ -52,6 +52,23 @@ def get_detection_to_bb_size_map(file_path):
     return detection_to_bb_size_map
 
 
+def get_detection_to_confidence_map(file_path):
+    detection_to_confidence_map = {}
+
+    with open(file_path, 'r') as csvfile:
+        reader = csv.DictReader(csvfile)
+
+        if not 'confidence' in reader.fieldnames:
+            return {}
+
+        for row in reader:
+            detection_id = int(row['record_id'])
+            confidence = float(row['confidence'])
+            detection_to_confidence_map[detection_id] = confidence
+
+    return detection_to_confidence_map
+
+
 def get_embs(dir_path, meta_file_name="track_meta.csv", emb_name="features", identifier_name="track_ids"):
 
     embs = {}
@@ -62,6 +79,7 @@ def get_embs(dir_path, meta_file_name="track_meta.csv", emb_name="features", ide
                     meta_file = os.path.join(root, meta_file_name)
                     track_map = get_detection_to_track_map(meta_file)
                     bb_size_map = get_detection_to_bb_size_map(meta_file)
+                    confidence = get_detection_to_confidence_map(meta_file)
 
                     if len(track_map) == 0:
                         logging.error(f"No meta file found in {meta_file}, skipping...")
@@ -73,6 +91,7 @@ def get_embs(dir_path, meta_file_name="track_meta.csv", emb_name="features", ide
                         (
                             track_map[id],
                             bb_size_map[id] if len(bb_size_map) > 0 else None,
+                            confidence[id] if len(confidence) > 0 else None,
                             emb
                         )
                         for id, emb in get_file_embs(file_path, emb_name, identifier_name)
@@ -109,14 +128,14 @@ def accelerated_cosine_similarity(matrix_A, matrix_B, batch_size=512, device='cu
 def aggregate_embeddings(embeddings, aggregation_fn):
     aggregated_embeddings = {}
 
-    for track_id, bb_size, emb in tqdm(embeddings, desc="Aggregating embeddings"):
+    for track_id, bb_size, confidence, emb in tqdm(embeddings, desc="Aggregating embeddings"):
         if track_id not in aggregated_embeddings:
             aggregated_embeddings[track_id] = []
 
-        aggregated_embeddings[track_id].append((bb_size, emb))
+        aggregated_embeddings[track_id].append((bb_size, confidence, emb))
 
     averaged_embeddings = [
-        (track_id, (aggregation_fn(embs) if len(embs) > 1 else embs[0][1]))
+        (track_id, (aggregation_fn(embs) if len(embs) > 1 else embs[0][-1]))
         for track_id, embs in aggregated_embeddings.items()
     ]
 
@@ -135,8 +154,8 @@ def _bb_weights(bb_size):
 
 
 def bb_weighted_average(embeddings):
-    bb_size = [(w, h) for (w, h), _ in embeddings]
-    embeddings = [torch.tensor(emb) for _, emb in embeddings]
+    bb_size = [(w, h) for (w, h), _, _ in embeddings]
+    embeddings = [torch.tensor(emb) for _, _, emb in embeddings]
 
     if any(size is None for size in bb_size):
         logging.warning(
@@ -151,7 +170,7 @@ def bb_weighted_average(embeddings):
 
 def bb_greedy(embeddings):
     bb_size = [(w, h) for (w, h), _ in embeddings]
-    embeddings = [torch.tensor(emb) for _, emb in embeddings]
+    embeddings = [torch.tensor(emb) for _, _, emb in embeddings]
 
     if any(size is None for size in bb_size):
         logging.warning(
@@ -160,6 +179,25 @@ def bb_greedy(embeddings):
         return torch.mean(embeddings, dim=0)
 
     weights = _bb_weights(bb_size)
+
+    return embeddings[torch.argmax(weights)]
+
+
+def bb_and_confidence_greedy(embeddings):
+    bb_size = [(w, h) for (w, h), _, _ in embeddings]
+    confidence = [torch.tensor(conf) for _, conf, _ in embeddings]
+    embeddings = [torch.tensor(emb) for _, _, emb in embeddings]
+
+    if any(size is None for size in bb_size) or any(conf is None for conf in confidence):
+        logging.warning(
+            f"Records have missing bounding box sizes, using simple average for aggregation."
+        )
+        return torch.mean(embeddings, dim=0)
+
+
+    weights = _bb_weights(bb_size)
+    weights = (weights + torch.tensor(confidence))
+    weights /= weights.sum()
 
     return embeddings[torch.argmax(weights)]
 

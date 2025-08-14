@@ -117,7 +117,8 @@ class QueuesMonitorThread(BaseThread):
     def _report(self):
         logging.debug("#" * 30)
         for (name, queue), occupancy_sum in zip(self.queues, self.samples_sum):
-            logging.debug("Queue %s mean occupancy: %.1f/%d" % (name, occupancy_sum / self.samples_num, queue.maxsize))
+            if self.samples_num > 0:
+                logging.debug("Queue %s mean occupancy: %.1f/%d" % (name, occupancy_sum / self.samples_num, queue.maxsize))
         self._reset_stats()
 
     def run(self):
