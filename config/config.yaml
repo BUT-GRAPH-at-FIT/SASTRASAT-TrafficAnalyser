@@ -18,9 +18,9 @@ video:
   max_fps: 25
   skip_frames: 0
   take_frames: null
-#  padding:
-#    left_line: (0, 0, 0, 0)
-#    right_line: (0, 0, 0, 0)
+  line_paddings:
+    left_line: [20, 750, 300, 130]
+    right_line: [1220, 20, 300, 130]
 
     # Crops for each camera type:
     # JS-BM-P487* left_line: (450, 850 , 650, 20 ) right_line: (1100, 20, 650, 20)

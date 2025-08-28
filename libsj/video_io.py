@@ -11,33 +11,6 @@ import numpy as np
 from queue import Queue, Full, Empty
 import time
 
-crop_dict = {
-    #                 left line (front)  ,   right line (back)
-    #               (l  , r   , t  , b  ),
-    "JS-BM-P487":  ((450, 850 , 650, 20 ), (1100, 20 , 650, 20 )),
-    "JK-CE-P571":  ((                   ), (20  , 20 , 150, 20 )),
-    "JS-BM-P488":  ((20 , 900 , 220, 130), (1100, 20 , 220, 130)),
-    "JS-BM-P489":  ((20 , 750 , 300, 130), (1220, 20 , 300, 130)),
-    "JS-BM-P490":  ((20 , 970 , 380, 20 ), (1030, 150, 380, 20 )),
-    "JS-BM-P491":  ((20 , 1100, 250, 20 ), (880 , 250, 250, 20 )),
-    "JS-BM-P493":  ((20 , 890 , 230, 20 ), (1050, 150, 200, 20 )),
-    "JS-BM-P4951": ((20 , 390 , 120, 20 ), (350 , 20 , 120, 20 )),
-    "JS-BM-P498":  ((20 , 800 , 300, 130), (1190, 20 , 300, 130)),
-    "JS-CM-P492":  ((20 , 950 , 250, 130), (1090, 20 , 250, 130)),
-    "JU-PO-P573":  ((20 , 340 , 150, 20 ), (415 , 60 , 150, 20 )),
-    "PJ-CE-P551":  ((20 , 370 , 300, 20 ), (400 , 20 , 300, 20 )),
-    "SD-PO-P576":  ((20 , 335 , 200, 20 ), (405 , 20 , 200, 20 )),
-    "SG-CE-P574":  ((20 , 385 , 135, 20 ), (365 , 20 , 135, 20 )),
-    "SU-CE-P575":  ((20 , 385 , 150, 20 ), (360 , 20 , 150, 20 )),
-}
-
-def _select_crop(video_path) -> tuple:
-    for key in crop_dict.keys():
-        if video_path.split("/")[-1].startswith(key):
-            return crop_dict[key]
-
-    return (20, 20, 20, 20), (20, 20, 20, 20)
-
 # TODO: Support both top/bottom padding based on crop
 def _pad_black(frame, pad):
     return np.pad(
@@ -80,12 +53,13 @@ def _crop_frame(frame, crop):
 
 # TODO pyav has bug that it returns one frame less than there actually is in the video file
 class VideoReader(BaseThread):
-    def __init__(self, video_path, max_fps=25, skip_frames=0, take_frames=None, video_ind=0, queue_max_size=128, av_options=None, name="VideoReader"):
+    def __init__(self, video_path, max_fps=25, skip_frames=0, take_frames=None, video_ind=0, queue_max_size=128,
+                 av_options=None, line_crops=((20, 20, 20, 20), (20, 20, 20, 20)), name="VideoReader"):
         super().__init__(name)
         self.queue = Queue(queue_max_size)
         self.video_ind = video_ind
         self.video_path = video_path
-        self.crop = _select_crop(video_path)
+        self.crop = line_crops
         logging.info("Opening video file: %s"%video_path)
         self.container = av.open(video_path, options=av_options)
         self.frame_step = max(1, int(round((1 / self.fps) / max_fps))) if max_fps > 0 else 1

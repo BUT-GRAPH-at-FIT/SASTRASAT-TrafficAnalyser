@@ -501,12 +501,14 @@ def main(cfg: DictConfig) -> None:
     all_threads = []
     try:
         # READER
+        crops = (tuple(cfg.video.line_paddings.left_line), tuple(cfg.video.line_paddings.right_line))
         reader = VideoReader(cfg.video.source,
                              max_fps=cfg.video.max_fps,
                              skip_frames=cfg.video.skip_frames,
                              take_frames=cfg.video.take_frames,
                              queue_max_size=QUEUE_SIZE,
-                             av_options={"rtsp_transport":"tcp","buffer_size":"2048","prefer_tcp":"1"})
+                             av_options={"rtsp_transport":"tcp","buffer_size":"2048","prefer_tcp":"1"},
+                             line_crops=crops)
         all_threads.append(reader)
         all_queues.append(("detector_in", reader.queue))
 
