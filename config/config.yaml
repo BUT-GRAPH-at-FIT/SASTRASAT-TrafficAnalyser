@@ -18,17 +18,37 @@ video:
   max_fps: 25
   skip_frames: 0
   take_frames: null
+#  padding:
+#    left_line: (0, 0, 0, 0)
+#    right_line: (0, 0, 0, 0)
+
+    # Crops for each camera type:
+    # JS-BM-P487* left_line: (450, 850 , 650, 20 ) right_line: (1100, 20, 650, 20)
+    # JK-CE-P571* left_line: () right_line: (20, 20, 150, 20)
+    # JS-BM-P488* left_line: (20 , 900, 220, 130) right_line: (1100, 20, 220, 130)
+    # JS-BM-P489* left_line: (20, 750, 300, 130) right_line: (1220, 20, 300, 130)
+    # JS-BM-P490* left_line: (20, 970, 380, 20) right_line: (1030, 150, 380, 20)
+    # JS-BM-P491* left_line: (20, 1100, 250, 20) right_line: (880, 250, 250, 20)
+    # JS-BM-P493* left_line: ((20, 890, 230, 20) right_line: (1050, 150, 200, 20)
+    # JS-BM-P4951* left_line: (20, 390, 120, 20) right_line: (350, 20, 120, 20)
+    # JS-BM-P498* left_line: (20, 800, 300, 130) right_line: (1190, 20, 300, 130)
+    # JS-CM-P492* left_line: (20, 950, 250, 130) right_line: (1090, 20, 250, 130)
+    # JU-PO-P573* left_line: (20, 340, 150, 20) right_line: (415, 60, 150, 20)
+    # PJ-CE-P551* left_line: (20, 370, 300, 20) right_line: (400, 20, 300, 20)
+    # SD-PO-P576* left_line: (20, 335, 200, 20) right_line: (405, 20, 200, 20)
+    # SG-CE-P574* left_line: (20, 385, 135, 20 ) right_line: (365, 20, 135, 20)
+    # SU-CE-P575* left_line: (20, 385, 150, 20) right_line: (360, 20, 150, 20)
 
 detection:
   model: models/detectors/vehicle_peds_ssd_mobilenet/frozen_inference_graph.pb # "path_to_frozen_graph"
   gpu_mem: 0.7
-  threshold: 0.4
+  threshold: 0.45
   scale_factor: 225
 
 tracker:
   type: IoU
-  iou: 0.4
-  terminate_after: 5
+  iou: 0.45
+  terminate_after: 7
 
 classification:
   mmr_model: models/classifiers/classifier_frontal_ResNet50_2DBB # "path_to_keras_model"

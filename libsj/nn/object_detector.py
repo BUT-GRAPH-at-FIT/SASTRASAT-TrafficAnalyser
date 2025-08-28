@@ -101,14 +101,22 @@ class ObjectDetectorThread(ProcessingThread):
         
     
     def process(self, data):
-        frame_id, frame, frame_ts, frame_corrupted = data # assume input from video reader
+        frame_id, orig_frame, frame, frame_ts, frame_corrupted, separator, transform_fn = data # assume input from video reader
         boxes, classes, scores = self.detector.detect(frame, return_scores=True)
+
+        # TODO: This can be cleaner...
+        boxes = np.stack(
+            [np.array(transform_fn(x1, y1, x2, y2))
+             for x1, y1, x2, y2 in boxes]
+        ) if len(boxes) > 0 else np.empty((0, 4))
+        is_front = np.asarray([bb[0] >= separator for bb in boxes])
+
         data = {
             "frame_id": frame_id,
             "frame_ts": frame_ts,
-            "frame": frame,
+            "frame": orig_frame,
             "is_corrupted": frame_corrupted,
-            "detections": np.hstack((boxes, classes.reshape(-1, 1), scores.reshape(-1, 1)))
+            "detections": np.hstack((boxes, classes.reshape(-1, 1), scores.reshape(-1, 1), is_front.reshape(-1, 1))),
         }
         return data
     

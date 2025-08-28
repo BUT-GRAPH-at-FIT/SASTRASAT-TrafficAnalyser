@@ -12,33 +12,71 @@ from queue import Queue, Full, Empty
 import time
 
 crop_dict = {
-    #             left, right  top, bottom
-    "JS-BM-P487": ((450, 20), (650, 20)),
-    "JK-CE-P571": ((20, 20), (150, 20)),
-    "JS-BM-P488": ((20, 20), (220, 130)),
-    "JS-BM-P489": ((20, 20), (300, 130)),
-    "JS-BM-P490": ((20, 150), (400, 20)),
-    "JS-BM-P491": ((20, 250), (250, 20)),
-    "JS-BM-P493": ((20, 150), (200, 20)),
-    "JS-BM-P4951": ((20, 20), (120, 20)),
-    "JS-BM-P498": ((20, 20), (300, 130)),
-    "JS-CM-P492": ((20, 20), (250, 130)),
-    "JU-PO-P573": ((20, 70), (150, 20)),
-    "PJ-CE-P551": ((20, 20), (300, 20)),
-    "SD-PO-P576": ((20, 20), (200, 20)),
-    "SG-CE-P574": ((20, 20), (135, 20)),
-    "SU-CE-P575": ((20, 20), (150, 20)),
+    #                 left line (front)  ,   right line (back)
+    #               (l  , r   , t  , b  ),
+    "JS-BM-P487":  ((450, 850 , 650, 20 ), (1100, 20 , 650, 20 )),
+    "JK-CE-P571":  ((                   ), (20  , 20 , 150, 20 )),
+    "JS-BM-P488":  ((20 , 900 , 220, 130), (1100, 20 , 220, 130)),
+    "JS-BM-P489":  ((20 , 750 , 300, 130), (1220, 20 , 300, 130)),
+    "JS-BM-P490":  ((20 , 970 , 380, 20 ), (1030, 150, 380, 20 )),
+    "JS-BM-P491":  ((20 , 1100, 250, 20 ), (880 , 250, 250, 20 )),
+    "JS-BM-P493":  ((20 , 890 , 230, 20 ), (1050, 150, 200, 20 )),
+    "JS-BM-P4951": ((20 , 390 , 120, 20 ), (350 , 20 , 120, 20 )),
+    "JS-BM-P498":  ((20 , 800 , 300, 130), (1190, 20 , 300, 130)),
+    "JS-CM-P492":  ((20 , 950 , 250, 130), (1090, 20 , 250, 130)),
+    "JU-PO-P573":  ((20 , 340 , 150, 20 ), (415 , 60 , 150, 20 )),
+    "PJ-CE-P551":  ((20 , 370 , 300, 20 ), (400 , 20 , 300, 20 )),
+    "SD-PO-P576":  ((20 , 335 , 200, 20 ), (405 , 20 , 200, 20 )),
+    "SG-CE-P574":  ((20 , 385 , 135, 20 ), (365 , 20 , 135, 20 )),
+    "SU-CE-P575":  ((20 , 385 , 150, 20 ), (360 , 20 , 150, 20 )),
 }
 
-def _select_crop(video_path):
-    crop = ((20, 20), (20, 20))
-
+def _select_crop(video_path) -> tuple:
     for key in crop_dict.keys():
         if video_path.split("/")[-1].startswith(key):
-            crop = crop_dict[key]
-            break
+            return crop_dict[key]
 
-    return crop
+    return (20, 20, 20, 20), (20, 20, 20, 20)
+
+# TODO: Support both top/bottom padding based on crop
+def _pad_black(frame, pad):
+    return np.pad(
+        frame,
+        ((0, pad), (0, 0), (0, 0)),
+        mode='constant',
+        constant_values=0
+    )
+
+def _crop_frame(frame, crop):
+    combined_frame = None
+    left_width = -1
+
+    for line in crop:
+        if len(line) <= 0:
+            left_width = 0
+            continue
+
+        cropped_line = frame[
+            line[2]:-line[3],
+            line[0]:-line[1],
+        ]
+
+        if combined_frame is None:
+            combined_frame = cropped_line
+
+            if left_width < 0:
+                left_width = combined_frame.shape[1]
+        else:
+            # TODO: Support both top/bottom padding based on crop
+            if combined_frame.shape[0] < cropped_line.shape[0]:
+                combined_frame = _pad_black(combined_frame, cropped_line.shape[0] - combined_frame.shape[0])
+            elif combined_frame.shape[0] > cropped_line.shape[0]:
+                cropped_line = _pad_black(cropped_line, combined_frame.shape[0] - cropped_line.shape[0])
+
+            combined_frame = np.concatenate((combined_frame, cropped_line), axis=1)
+
+    return combined_frame, left_width
+
 
 # TODO pyav has bug that it returns one frame less than there actually is in the video file
 class VideoReader(BaseThread):
@@ -47,7 +85,7 @@ class VideoReader(BaseThread):
         self.queue = Queue(queue_max_size)
         self.video_ind = video_ind
         self.video_path = video_path
-        self.horizontal_crop, self.vertical_crop = _select_crop(video_path)
+        self.crop = _select_crop(video_path)
         logging.info("Opening video file: %s"%video_path)
         self.container = av.open(video_path, options=av_options)
         self.frame_step = max(1, int(round((1 / self.fps) / max_fps))) if max_fps > 0 else 1
@@ -111,15 +149,29 @@ class VideoReader(BaseThread):
             if frame_id >= self.skip_frames and frame_id % self.frame_step == 0:
                 # ts = float(frame_raw.pts * self._time_base) if frame_raw.pts is not None else 0
                 ts = int(frame_raw.pts) if frame_raw.pts is not None else 0
-                frame = np.array(frame_raw.to_image())
+                orig_frame = np.array(frame_raw.to_image())
 
                 # crop the best camera view
-                frame = frame[
-                    self.vertical_crop[0]:-self.vertical_crop[1],
-                    self.horizontal_crop[0]:-self.horizontal_crop[1],
-                ]
+                frame, separator = _crop_frame(orig_frame, self.crop)
 
-                self.submit((frame_id, frame, ts, frame_raw.is_corrupt))
+                # Capture them all!
+                fw, fh = frame.shape[1], frame.shape[0]
+                ofw, ofh = orig_frame.shape[1], orig_frame.shape[0]
+
+                def transform_fn(x1, y1, x2, y2):
+                    is_left = lambda x: x < (separator / ofw)
+                    line_idx = lambda x: 0 if is_left(x) else 1
+                    x_px = lambda x: x * fw
+
+                    # TODO: Simplify
+                    return [
+                        (self.crop[line_idx(x1)][0] + (x_px(x1) if is_left(x1) else x_px(x1) - separator)) / ofw,
+                        (self.crop[line_idx(x1)][2] + y1 * fh) / ofh,
+                        (self.crop[line_idx(x1)][0] + (x_px(x2) if is_left(x1) else x_px(x2) - separator)) / ofw,
+                        (self.crop[line_idx(x1)][2] + y2 * fh) / ofh,
+                    ]
+
+                self.submit((frame_id, orig_frame, frame, ts, frame_raw.is_corrupt, separator, transform_fn))
             if self.stopped:
                 return
         self.submit(None)
