@@ -9,12 +9,33 @@ import faiss
 import math
 
 
-def find_matches(query: np.ndarray, db: np.ndarray | faiss.IndexIVFFlat, batch_size: int = 10, move_to_gpu: bool = True):
+def find_matches(
+        query: np.ndarray,
+        db: np.ndarray | faiss.IndexIVFFlat,
+        number_of_clusters: int = None,
+        batch_size: int = 10,
+        move_to_gpu: bool = True
+    ):
+    """
+    Finds the best matches between a query and a database. If the database is a
+    faiss.IndexIVFFlat, it will be used directly. Otherwise, a new index will be
+    created with number of clusters equal to the square root of the number of
+    database features.
+
+    Args:
+        query: The query features.
+        db: The database features or a faiss.IndexIVFFlat.
+        batch_size: The batch size for the index.
+        move_to_gpu: Whether to move the index to the GPU.
+
+    Returns:
+        The similarities and indices of the best matches.
+    """
     if isinstance(db, faiss.IndexIVFFlat):
         emb_size = db.d
         index = db
     elif isinstance(db, np.ndarray):
-        nlist = int(math.sqrt(len(db)))
+        nlist = int(math.sqrt(len(db))) if number_of_clusters is None else number_of_clusters
         emb_size = db.shape[1]
 
         quantizer = faiss.IndexFlatIP(emb_size)
