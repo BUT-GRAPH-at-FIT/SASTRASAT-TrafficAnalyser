@@ -13,7 +13,6 @@ def find_matches(
         query: np.ndarray,
         db: np.ndarray | faiss.IndexIVFFlat,
         number_of_clusters: int = None,
-        batch_size: int = 10,
         move_to_gpu: bool = True
     ):
     """
