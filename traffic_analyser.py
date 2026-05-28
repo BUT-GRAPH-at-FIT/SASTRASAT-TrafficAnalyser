@@ -17,9 +17,11 @@ import sys
 import h5py
 import csv
 
+import tensorflow as tf
 from tensorflow.keras.layers import DepthwiseConv2D, ReLU
 from tensorflow.keras.models import load_model, Model
-from tensorflow.compat.v1.keras.backend import set_session
+# from tensorflow.compat.v1 import keras
+# from keras.backend import set_session
 
 from libsj.nn.object_detector import ObjectDetectorThread
 from libsj.tracking import TrackerThread, IoUTracker, KCFTracker
@@ -79,12 +81,19 @@ class ClassificationThread(ProcessingThread):
         self.color_model_path = color_model_path
         self.extractor_model_path = extractor_model_path
         self.collect_vehicle_crops = collect_vehicle_crops
-        # Init session for keras models
-        config = tf.compat.v1.ConfigProto()
-        config.gpu_options.allow_growth = True
-        self.keras_session = tf.compat.v1.Session(config=config)
-        self.max_batch_size = max_batch_size
-        set_session(self.keras_session)
+        # # Init session for keras models
+        # config = tf.compat.v1.ConfigProto()
+        # config.gpu_options.allow_growth = True
+        # self.keras_session = tf.compat.v1.Session(config=config)
+        # self.max_batch_size = max_batch_size
+        # set_session(self.keras_session)
+        
+
+        gpus = tf.config.list_physical_devices('GPU')
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+
+        print(gpus)
 
     def init_thread(self):
         self.extractor_model = load_model(os.path.join(self.extractor_model_path, "model.h5"),
