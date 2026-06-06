@@ -17,7 +17,6 @@ import sys
 import h5py
 import csv
 
-import tensorflow as tf
 from tensorflow.keras.layers import DepthwiseConv2D, ReLU
 from tensorflow.keras.models import load_model, Model
 # from tensorflow.compat.v1 import keras
@@ -38,42 +37,12 @@ import hydra
 STATUS_BAR_HEIGHT = 30
 QUEUE_SIZE = 256
 
-VIAN_TOKEN = "VRASSEO_ISPANHEL_TEST"
-VIAN_SERVER_URL = "https://vian-dev.fit.vutbr.cz/vian_sensingapi/"
-VIAN_PROJECT_ID = "test"
-
-def parse_args():
-    parser = argparse.ArgumentParser(description="Tensorflow object detection in video",
-                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-
-    # parser.add_argument("--config", "-c", type=str, required=True, help="path to json file with config")
-    parser.add_argument("--frame-step", type=int, default=1, help="frames step")
-    parser.add_argument("--skip-frames", type=int, default=0, help="skip x first frames")
-    parser.add_argument("--take-frames", type=int, default=None, help="take only x frames, default all")
-    parser.add_argument("--detection-model", type=str, help="detector frozen graph path", required=True)
-    parser.add_argument("--detection-gpu-mem", type=float, help="fraction of gpu memory to use for detection", default=0.20)
-    parser.add_argument("--detection-threshold", type=float, default=0.5, help="threshold for detection")
-    parser.add_argument("--classification-model", type=str, help="classifier keras model (.h5)", required=True)
-    parser.add_argument("--extractor-model", type=str, help="extractor model (.h5) for re-id features", required=True)
-    parser.add_argument("--color-classification-model", type=str, default="models/classifiers/colors_MobileNet", help="color classifier keras model (.h5)")
-    parser.add_argument("--tracker", type=str, default="IoU", help="tracker type")
-    parser.add_argument("--tracker-iou", type=float, default=0.4, help="threshold for matching of tracks and detections")
-    parser.add_argument("--tracker-terminate-after", type=int, default=5, help="terminate tracks after specified number of frames without detection")
-    parser.add_argument("--video-output", default=None, type=str, help="output video file; if None, the output is shown on screen")
-    parser.add_argument("--output", "-o", type=str, required=True, help="data output dir")
-    parser.add_argument("--calibration-output", type=str, default=None, help="data output dir")
-    parser.add_argument("video", type=str, help="path to input video")
-    args = parser.parse_args()
-    return args
-
-
 class ClassificationThread(ProcessingThread):
     """
     Thread in processing pipeline.
     Feature vectors are computed for detected vehicles
     """
 
-    # def __init__(self, model_path, input_queue, output_queue, name="Classifier"):
     def __init__(self, model_path, color_model_path, extractor_model_path, input_queue, output_queue,
                  max_batch_size=32, collect_vehicle_crops=False, name="Classifier"):
         super().__init__(input_queue, output_queue, name)
@@ -96,7 +65,6 @@ class ClassificationThread(ProcessingThread):
         self.image_size = (self.extractor_model.input_shape[2], self.extractor_model.input_shape[1])  # width, height
 
     def process(self, data):
-        # TODO: Upravit tak, aby se vzali detekce ze všech tracků, provedlo se rozpoznání a pak se přiradilo na základě ID tracku ke správným trackům
         frame = data["frame"]
         vehicle_crops = []
         vehicle_loose_crops = []
@@ -223,8 +191,8 @@ class AnalyseThread(ProcessingThread):
             fig, axs = plt.subplots(nrows=2, figsize=(18, 20))
             axs[0].imshow(frame)
             for key in ["semaphore", "roi", "protected_area", "crossing"]:
-                axs[0].plot(config[key][list(range(config[key].shape[0])) + [0], 0],
-                            config[key][list(range(config[key].shape[0])) + [0], 1],
+                axs[0].plot(self.config[key][list(range(self.config[key].shape[0])) + [0], 0],
+                            self.config[key][list(range(self.config[key].shape[0])) + [0], 1],
                             lw=5, ls="--", label=key)
             axs[0].legend()
             self.calib.plot_grid(axs[1], vp1_dir_mults=(-10, 15), vp2_dir_mults=(-10, 10))
@@ -484,16 +452,8 @@ class DataOutputThread(ProcessingThread):
 
 def main(cfg: DictConfig) -> None:
     setup_logging(logging.DEBUG)
-    # args = parse_args()
-    
-    # Intialize Hydra config
-    # initialize(config_path="config")  # Inicializujte Hydra s cestou k adresáři konfigurace
-    # cfg = compose(config_name="config")  # Načtěte konfigurační soubor config.yaml
-    # initialize_config_module(config_module="config")
-    setup_logging(logging.DEBUG)
-    # cfg = compose(config_name="config", overrides=["video=test.mp4", "output=test_out"])
 
-    print(OmegaConf.to_yaml(cfg))  # Vypište konfiguraci
+    print(OmegaConf.to_yaml(cfg))  # print config
 
     # experiment path: year_month/day/hour/minute
     camera_name = cfg.video.source.split("/")[-1].split(".")[0]
@@ -515,8 +475,8 @@ def main(cfg: DictConfig) -> None:
         all_threads.append(reader)
         all_queues.append(("detector_in", reader.queue))
 
-        # GET CONFIG
-        # config = get_config(args.config, reader.frame_shape[0:2])
+        # GET CONFIG - defined in config/config.yaml
+        # "calib" is not defined in config/config.yaml, so it is not used
         config = {"calib": None}
 
         # DETECTOR
