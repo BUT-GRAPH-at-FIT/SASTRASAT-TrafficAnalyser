@@ -38,9 +38,24 @@ STATUS_BAR_HEIGHT = 30
 QUEUE_SIZE = 256
 
 class ClassificationThread(ProcessingThread):
-    """
-    Thread in processing pipeline.
-    Feature vectors are computed for detected vehicles
+    """Pipeline stage that extracts a re-identification feature per vehicle.
+
+    For every track in state ``new`` or ``detected`` with ``class == 1`` (vehicle),
+    the bounding box is cropped from the frame, normalised, and passed through a Keras
+    feature extractor. The resulting L2-normalised 128-d embedding is written back onto
+    the track as ``feature`` (and ``bb_size``; optionally a padded ``crop``).
+
+    Args:
+        model_path: Path to the make/model/colour classifier (accepted but its inference
+            is not currently wired in).
+        color_model_path: Path to the colour classifier (accepted but unused).
+        extractor_model_path: Directory holding the re-id extractor ``model.h5``.
+        input_queue: Queue of payloads coming from the tracker stage.
+        output_queue: Queue the enriched payload is forwarded to.
+        max_batch_size: Maximum batch size for extractor inference.
+        collect_vehicle_crops: If True, keep the padded vehicle crop on each track for
+            later saving by :class:`DataOutputThread`.
+        name: Thread name used in logs and the queue monitor.
     """
 
     def __init__(self, model_path, color_model_path, extractor_model_path, input_queue, output_queue,
@@ -59,12 +74,14 @@ class ClassificationThread(ProcessingThread):
         print(gpus)
 
     def init_thread(self):
+        """Load the extractor model on the worker thread and derive its input size."""
         self.extractor_model = load_model(os.path.join(self.extractor_model_path, "model.h5"),
                                       custom_objects={'relu6': ReLU(6.), 'DepthwiseConv2D': DepthwiseConv2D}, compile=False)
         self.vehicle_extractor = Model(self.extractor_model.input, self.extractor_model.layers[-1].output, name="Extractor")
         self.image_size = (self.extractor_model.input_shape[2], self.extractor_model.input_shape[1])  # width, height
 
     def process(self, data):
+        """Extract and attach a 128-d feature to every vehicle track in ``data``."""
         frame = data["frame"]
         vehicle_crops = []
         vehicle_loose_crops = []
@@ -117,10 +134,27 @@ class ClassificationThread(ProcessingThread):
 
 
 class AnalyseThread(ProcessingThread):
-    """
-    Thread in processing pipeline.
-    All traffic situation analysis is done in this thread.
-    This includes: estimation of semaphore state, violation detection, and others.
+    """Pipeline stage that derives per-track geometry and frame statistics.
+
+    For each active track it computes a reference point (vehicle centre / pedestrian
+    bottom-centre), a short-horizon movement vector and speed, and the ``is_moving`` flag,
+    then assembles the per-frame ``stats`` dict shown on the status bar.
+
+    Note:
+        The richer traffic-analysis features (semaphore-state estimation, ROI /
+        protected-area tests, violation detection, traffic calibration) are implemented in
+        :meth:`get_semaphore_state`, :meth:`get_violation` and :meth:`draw_calibration` but
+        are currently **disabled** (their call sites in :meth:`process` are commented out;
+        ``semaphore`` is hardcoded to ``"None"`` and counts are zeroed).
+
+    Args:
+        config: Dict of analysis configuration; ``config["calib"]`` holds the (optional)
+            calibration object.
+        input_queue: Queue of payloads coming from the classifier stage.
+        output_queue: Queue the enriched payload is forwarded to.
+        calibration_output: Path used to save a calibration overlay image (unused while
+            calibration is disabled).
+        name: Thread name used in logs and the queue monitor.
     """
 
     def __init__(self, config, input_queue, output_queue, calibration_output, name="Analyse"):
@@ -135,6 +169,11 @@ class AnalyseThread(ProcessingThread):
         self.heights = {}
 
     def get_semaphore_state(self, frame):
+        """Estimate the traffic-light state from a warped crop (currently unused).
+
+        Returns ``"red"``, ``"orange"`` or ``"green"`` based on HSV colour counts inside
+        the configured ``semaphore`` quadrilateral. Disabled in the active pipeline.
+        """
         # global semaphore_img
         semaphore_img = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 
@@ -173,6 +212,12 @@ class AnalyseThread(ProcessingThread):
         return state_text[self.semaphore_state]
 
     def get_violation(self, track, semaphore, pedestrian_in_protected):
+        """Classify a single track's traffic violation, if any (currently unused).
+
+        Returns a violation label (e.g. ``"vehicle_protected_red"``) or ``None``. Relies
+        on ROI/protected-area config and the semaphore state; disabled in the active
+        pipeline.
+        """
         if int(track["class"]) == 1:  # vehicle
             in_protected_area = cv2.pointPolygonTest(self.config["protected_area"], track["position"], False) > 0
             if in_protected_area and pedestrian_in_protected and track["is_moving"]:
@@ -187,6 +232,7 @@ class AnalyseThread(ProcessingThread):
         return None
 
     def draw_calibration(self, frame):
+        """Save a one-off overlay of the calibration grid and ROIs (currently unused)."""
         if not self.calibration_drawn and self.calibration_output is not None:
             fig, axs = plt.subplots(nrows=2, figsize=(18, 20))
             axs[0].imshow(frame)
@@ -203,6 +249,7 @@ class AnalyseThread(ProcessingThread):
             self.calibration_drawn = True
 
     def process(self, data):
+        """Annotate every track with position/movement and build ``data["stats"]``."""
         frame = data["frame"]
         # self.draw_calibration(frame)
         # semaphore = self.get_semaphore_state(frame)
@@ -273,9 +320,17 @@ class AnalyseThread(ProcessingThread):
 
 
 class DrawThread(ProcessingThread):
-    """
-    Thread in processing pipeline.
-    Draw current situation to the frame
+    """Pipeline stage that renders the current situation onto the frame.
+
+    Draws each active track's bounding box, ID label, reference point and (for moving
+    vehicles) a movement arrow, then prepends a status bar with per-frame counts. Unlike
+    the other stages this returns a bare BGR frame (ndarray), not the payload dict, since
+    it is the last stage that needs the structured data.
+
+    Args:
+        input_queue: Queue of analysed payloads.
+        output_queue: Queue the rendered frame is forwarded to (display or video writer).
+        name: Thread name used in logs and the queue monitor.
     """
 
     def __init__(self, input_queue, output_queue, name="Draw"):
@@ -343,9 +398,14 @@ class DrawThread(ProcessingThread):
         return frame
 
 class ShowThread(ProcessingThread):
-    """
-    Thread in processing pipeline.
-    Shows the situation on screen.
+    """Terminal pipeline stage that displays rendered frames in an OpenCV window.
+
+    Used when no output video file is configured (``output.video_output=null``).
+
+    Args:
+        input_queue: Queue of rendered frames from :class:`DrawThread`.
+        window_name: Title of the OpenCV display window.
+        name: Thread name used in logs and the queue monitor.
     """
 
     def __init__(self, input_queue, window_name="Traffic Analysis", name="Show"):
@@ -365,9 +425,19 @@ class ShowThread(ProcessingThread):
 
 
 class DataOutputThread(ProcessingThread):
-    """
-    Thread in processing pipeline.
-    Saves images of vehicles and their feature vectors.
+    """Terminal pipeline stage that persists per-detection metadata and features.
+
+    For each vehicle detection it appends a row to ``track_meta.csv`` and accumulates the
+    128-d feature into a resizable ``features.h5`` dataset; optionally it writes the crop
+    JPEG under ``vehicle_crops/<track_id>/``. A ZMQ ``PUSH`` socket is opened for optional
+    streaming of output.
+
+    Args:
+        input_queue: Queue of analysed payloads (the data-output branch of the fan-out).
+        output_dir: Directory the CSV/HDF5/crops are written to (the timestamped run dir).
+        zmq_ip_addr: Address the ZMQ PUSH socket connects to.
+        save_vehicle_crops: If True, write per-detection crop images.
+        name: Thread name used in logs and the queue monitor.
     """
 
     def __init__(self, input_queue, output_dir, zmq_ip_addr="tcp://localhost:5555",
@@ -451,6 +521,17 @@ class DataOutputThread(ProcessingThread):
 
 
 def main(cfg: DictConfig) -> None:
+    """Build and run the full processing pipeline from a Hydra config.
+
+    Constructs every stage, wires them together with bounded queues, registers each queue
+    with the monitor, starts all threads, and blocks on the data-output sink until the
+    stream ends. A ``finally`` block calls ``exit()`` on every thread so the pipeline shuts
+    down cleanly on completion, error, or interrupt. Output is written to a timestamped,
+    per-camera directory derived from ``cfg.video.source``.
+
+    Args:
+        cfg: Hydra/OmegaConf configuration loaded from ``config/config.yaml``.
+    """
     setup_logging(logging.DEBUG)
 
     print(OmegaConf.to_yaml(cfg))  # print config

@@ -8,14 +8,38 @@ from ..utils import bb_iou
 import numpy as np
 
 class BaseTracker:
+    """Base multi-object tracker that associates detections by IoU across frames.
+
+    Maintains a dict of active tracks, matches new detections to predicted positions by
+    IoU (within the same class), spawns tracks for unmatched detections, and updates each
+    track's lifecycle ``status`` (``new`` / ``detected`` / ``undetected`` / ``terminated``).
+    Subclasses provide motion prediction by overriding :meth:`_predict_new_positions`
+    (and optionally :meth:`_init_new_trackers` / :meth:`_delete_terminated_tracks`).
+
+    Args:
+        iou_threshold: Minimum IoU for a detection to be matched to a track.
+        terminate_after_frames: Frames a track may go undetected before termination.
+    """
+
     def __init__(self, iou_threshold=0.5, terminate_after_frames = 5):
         self.iou_threshold = iou_threshold
         self.terminate_after_frames = terminate_after_frames
         self._tracks = {}
         self._next_track_id = 0
-        
-        
+
+
     def track(self, frame_id, frame, detections):
+        """Update tracks with the current frame's detections.
+
+        Args:
+            frame_id: Index of the current frame.
+            frame: The current image (used by subclasses for motion prediction).
+            detections: Array of ``[x1, y1, x2, y2, class, score, ...]`` detection rows.
+
+        Returns:
+            A deep copy of the track dict (taken before terminated tracks are dropped),
+            keyed by ``track_id``.
+        """
         new_positions = self._predict_new_positions(frame)
         ###############
         # match tracks

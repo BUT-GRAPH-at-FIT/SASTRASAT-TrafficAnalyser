@@ -9,6 +9,14 @@ import numpy as np
 
 
 class KCFTracker(BaseTracker):
+    """IoU tracker whose positions are predicted by per-track OpenCV KCF trackers.
+
+    Each track owns a ``cv2.TrackerKCF`` initialised from its first box; predicted
+    positions come from running those visual trackers on the current frame (falling back
+    to the last box on failure). More robust to motion than :class:`IoUTracker` at higher
+    per-frame cost. Accepts the same constructor arguments as :class:`BaseTracker`.
+    """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._kcf_trackers = {}

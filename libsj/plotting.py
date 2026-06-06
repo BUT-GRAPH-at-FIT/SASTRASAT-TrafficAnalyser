@@ -34,6 +34,19 @@ def plot_2DBB(bb2d, ax=None, *args, **kwargs):
     
 def cv_draw_text(frame, text, position, font = cv2.FONT_HERSHEY_DUPLEX, font_scale = 1, font_thickness = 2,
                  padding = 5, text_color = (0, 0, 0), background_color = (255, 255, 102)):
+    """Draw text with a filled background rectangle onto an image, in place.
+
+    Args:
+        frame: Image array to draw on (modified in place).
+        text: String to render.
+        position: ``(x, y)`` baseline position of the text.
+        font: OpenCV ``HersheyFonts`` constant.
+        font_scale: Font scale factor.
+        font_thickness: Stroke thickness in pixels.
+        padding: Padding in pixels around the text for the background rectangle.
+        text_color: BGR colour of the text.
+        background_color: BGR colour of the background rectangle.
+    """
     size, baseline = cv2.getTextSize(text, font, font_scale, font_thickness)
     x,y = position
     y1,y2 = np.clip([y - size[1] - padding, y + padding], 0, frame.shape[0]).astype(int)

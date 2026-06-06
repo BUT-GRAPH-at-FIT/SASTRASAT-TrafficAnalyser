@@ -38,6 +38,14 @@ def save_np_cache(path, data):
 
 # %%
 def ensure_dir(d):
+    """Create directory ``d`` (and parents) if it does not already exist.
+
+    An empty path is a no-op (for compatibility with ``os.path.dirname`` on a bare
+    filename), and an existing directory is tolerated without error.
+
+    Args:
+        d: Directory path to ensure exists.
+    """
     if len(d) == 0:  # for empty dirs (compatibility with os.path.dirname("xxx.yy"))
         return
     if not os.path.exists(d):
@@ -70,6 +78,11 @@ def progress_bar(text, items):
 
 
 def setup_logging(level=logging.DEBUG):
+    """Configure root logging with a thread-aware, timestamped format.
+
+    Args:
+        level: Logging level passed to ``logging.basicConfig``.
+    """
     logging.basicConfig(level=level, format='[%(levelname)s] [%(threadName)s] [%(asctime)s] %(message)s')
 
 
