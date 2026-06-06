@@ -81,13 +81,7 @@ class ClassificationThread(ProcessingThread):
         self.color_model_path = color_model_path
         self.extractor_model_path = extractor_model_path
         self.collect_vehicle_crops = collect_vehicle_crops
-        # # Init session for keras models
-        # config = tf.compat.v1.ConfigProto()
-        # config.gpu_options.allow_growth = True
-        # self.keras_session = tf.compat.v1.Session(config=config)
-        # self.max_batch_size = max_batch_size
-        # set_session(self.keras_session)
-        
+        self.max_batch_size = max_batch_size
 
         gpus = tf.config.list_physical_devices('GPU')
         for gpu in gpus:
