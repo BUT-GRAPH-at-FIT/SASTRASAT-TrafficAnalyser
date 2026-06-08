@@ -1,5 +1,15 @@
 # TrafficAnalyser
 
+| Basic Info      |      |
+|-----------------|------|
+| **Project**     | VB02000081 - Bezpečné dopravní systémy s pokročilou technologií |
+| **Funding**     | MV SECTECH II |
+| **Deliverable** | VB02000081-V2 |
+| **Title (EN)**  | Data processing methods for transport purposes |
+| **Title (CZ)**  | Metody zpracování dat pro dopravní účely |
+| **Authors**     | ŠPAŇHEL, J.; BERAN, V.; HEROUT, A.; ZEMČÍK, P. |
+| **Affiliation** | Graph@FIT, Brno University of Technology |
+
 TrafficAnalyser processes a video file or RTSP stream through a real-time pipeline that
 **detects** and **tracks** vehicles and pedestrians, **extracts** a 128-dimensional
 re-identification feature per vehicle, renders an **annotated video**, and writes
