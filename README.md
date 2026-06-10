@@ -4,7 +4,7 @@
 |-----------------|------|
 | **Project**     | VB02000081 - Bezpečné dopravní systémy s pokročilou technologií |
 | **Funding**     | MV SECTECH II |
-| **Deliverable** | VB02000081-V2 |
+| **Deliverable** | VB02000081-V3 |
 | **Title (EN)**  | Data processing methods for transport purposes |
 | **Title (CZ)**  | Metody zpracování dat pro dopravní účely |
 | **Authors**     | ŠPAŇHEL, J.; BERAN, V.; HEROUT, A.; ZEMČÍK, P. |
