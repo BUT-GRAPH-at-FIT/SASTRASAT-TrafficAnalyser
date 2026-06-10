@@ -53,6 +53,28 @@ def _crop_frame(frame, crop):
 
 # TODO pyav has bug that it returns one frame less than there actually is in the video file
 class VideoReader(BaseThread):
+    """Source thread that decodes a video file or stream into the pipeline queue.
+
+    Uses PyAV to decode frames, applies frame subsampling to approximate ``max_fps`` and
+    honours ``skip_frames``/``take_frames``, then crops each frame to the configured left
+    and right camera views before pushing it onto ``self.queue``. Each item is a tuple
+    ``(frame_id, orig_frame, cropped_frame, ts, is_corrupt, separator, transform_fn)``,
+    where ``transform_fn`` maps cropped-frame coordinates back to the original frame. A
+    ``None`` poison pill is pushed when the stream ends.
+
+    Args:
+        video_path: Path to a video file or an RTSP/stream URL.
+        max_fps: Target processing frame rate; frames are subsampled to approximate it.
+        skip_frames: Number of leading frames to skip.
+        take_frames: Maximum number of frames to read after ``skip_frames`` (``None`` = all).
+        video_ind: Index of the video stream within the container.
+        queue_max_size: Capacity of the bounded output queue.
+        av_options: Options passed to ``av.open`` (e.g. RTSP transport settings).
+        line_crops: ``(left_line, right_line)`` crop rectangles used to stitch the relevant
+            camera view; each is ``(left, right, top, bottom)`` padding in pixels.
+        name: Thread name used in logs and the queue monitor.
+    """
+
     def __init__(self, video_path, max_fps=25, skip_frames=0, take_frames=None, video_ind=0, queue_max_size=128,
                  av_options=None, line_crops=((20, 20, 20, 20), (20, 20, 20, 20)), name="VideoReader"):
         super().__init__(name)
@@ -161,6 +183,26 @@ class VideoReader(BaseThread):
 
 
 class VideoWriter(BaseThread):
+    """Sink thread that encodes frames from a queue into an output video file.
+
+    Reads frames from ``input_queue`` (or its own queue) and muxes them with PyAV. A
+    ``None`` poison pill flushes the encoder and marks the writer finished; the
+    context-manager exit appends the pill and waits for the flush before closing.
+
+    Args:
+        video_path: Output file path.
+        width: Output frame width in pixels.
+        height: Output frame height in pixels.
+        fps: Output frame rate.
+        bit_rate: Target encoder bit rate.
+        codec: Encoder codec name (e.g. ``"libx264"``, ``"mpeg4"``).
+        pix_fmt: Output pixel format.
+        queue_max_size: Capacity of the internal queue when ``input_queue`` is ``None``.
+        input_queue: Existing queue to consume frames from; if ``None`` a new one is created.
+        swap_channels: If True, reverse the channel order (RGB<->BGR) before encoding.
+        name: Thread name used in logs and the queue monitor.
+    """
+
     def __init__(self, video_path, width, height, fps, bit_rate=5120000, codec="libx264", pix_fmt="yuv420p", queue_max_size=128, input_queue=None, swap_channels=False, name="VideoWriter"):
         super().__init__(name)
         if input_queue is None:

@@ -11,6 +11,22 @@ from ..threading import ProcessingThread
 
 
 class ObjectDetector:
+    """Wraps a TensorFlow 1.x frozen-graph detector loaded via ``tf.compat.v1``.
+
+    Loads a frozen inference graph into the given session and exposes
+    :meth:`detect`/:meth:`detect_multi`, which return normalised boxes (reordered to
+    ``[x1, y1, x2, y2]``) plus class ids and optional scores, filtered by a confidence
+    threshold.
+
+    Args:
+        model_path: Path to the frozen inference graph (``.pb``).
+        session: A ``tf.compat.v1.Session`` whose graph the model is imported into.
+        prefix: Name scope used when importing the graph.
+        scale_factor: Optional input downscale for speed; a value > 1 is treated as a
+            target height in pixels and converted to a ratio on first use.
+        default_threshold: Confidence threshold used when ``detect`` is called without one.
+    """
+
     def __init__(self, model_path, session, prefix="detector", scale_factor=None, default_threshold=0.5):
         self.model_path = model_path
         self.session = session
@@ -43,6 +59,17 @@ class ObjectDetector:
         return boxes[:, [1,0,3,2]]
         
     def detect(self, frame, return_scores = False, threshold = None):
+        """Run detection on a single frame.
+
+        Args:
+            frame: HxWx3 image array.
+            return_scores: If True, also return per-detection scores.
+            threshold: Confidence threshold; falls back to ``default_threshold`` if ``None``.
+
+        Returns:
+            ``(boxes, classes)`` or ``(boxes, classes, scores)`` if ``return_scores`` is
+            True. Boxes are normalised ``[x1, y1, x2, y2]``.
+        """
         assert frame.ndim == 3
         # speed up detection by scaling
         if self.scale_factor is not None:
@@ -63,6 +90,16 @@ class ObjectDetector:
             return boxes, classes
             
     def detect_multi(self, frames, return_scores = False, threshold = None):
+        """Run detection on a batch of frames.
+
+        Args:
+            frames: NxHxWx3 batch of images.
+            return_scores: If True, include per-detection scores in each result.
+            threshold: Confidence threshold; falls back to ``default_threshold`` if ``None``.
+
+        Returns:
+            A list with one ``(boxes, classes[, scores])`` tuple per input frame.
+        """
         assert frames.ndim == 4
         if threshold is None:
             threshold = self.default_threshold
@@ -82,6 +119,25 @@ class ObjectDetector:
         
         
 class ObjectDetectorThread(ProcessingThread):
+    """Pipeline stage that runs the object detector on each frame from the reader.
+
+    Creates a TF session and :class:`ObjectDetector` on the worker thread, then for each
+    frame produces a payload dict with ``frame_id``, ``frame_ts``, ``frame`` (original),
+    ``is_corrupted`` and a ``detections`` array of ``[x1, y1, x2, y2, class, score,
+    is_front]`` rows, with boxes mapped back to original-frame coordinates.
+
+    Args:
+        model_path: Path to the frozen inference graph (``.pb``).
+        input_queue: Queue of frame tuples from :class:`~libsj.video_io.VideoReader`.
+        output_queue: Queue the detection payload is forwarded to.
+        prefix: Name scope used when importing the graph.
+        threshold: Detection confidence threshold.
+        gpu_mem: Per-process GPU memory fraction for the TF session.
+        allow_growth: If True, let the TF session grow GPU memory on demand.
+        detector_scale_factor: Optional input downscale passed to :class:`ObjectDetector`.
+        name: Thread name used in logs and the queue monitor.
+    """
+
     def __init__(self, model_path, input_queue, output_queue, prefix="detector", threshold=0.5, gpu_mem=0.9, allow_growth=False, detector_scale_factor=None, name="Detector"):
         super().__init__(input_queue, output_queue, name)
         self.model_path = model_path

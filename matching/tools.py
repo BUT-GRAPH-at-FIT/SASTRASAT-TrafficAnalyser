@@ -22,13 +22,14 @@ def find_matches(
     database features.
 
     Args:
-        query: The query features.
-        db: The database features or a faiss.IndexIVFFlat.
-        batch_size: The batch size for the index.
-        move_to_gpu: Whether to move the index to the GPU.
+        query: The query features, shape (n_queries, emb_size).
+        db: The database features (n_db, emb_size) or a pre-built faiss.IndexIVFFlat.
+        number_of_clusters: Number of IVF clusters (nlist) when building an index from a
+            numpy array; defaults to sqrt(len(db)).
+        move_to_gpu: Whether to move the index to the GPU before searching.
 
     Returns:
-        The similarities and indices of the best matches.
+        A tuple (similarities, indices) of the top-1 match per query, each as a flat list.
     """
     if isinstance(db, faiss.IndexIVFFlat):
         emb_size = db.d

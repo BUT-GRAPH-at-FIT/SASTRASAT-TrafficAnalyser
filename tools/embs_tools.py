@@ -9,6 +9,19 @@ from tqdm import tqdm
 
 
 def get_file_embs(file_path, emb_name="features", identifier_name="track_ids"):
+    """Read (identifier, embedding) pairs from a pipeline ``features.h5`` file.
+
+    Args:
+        file_path: Path to the HDF5 file produced by the pipeline.
+        emb_name: Dataset name holding the feature vectors.
+        identifier_name: Dataset name holding the record identifiers.
+
+    Returns:
+        A list of ``(identifier, embedding)`` tuples.
+
+    Raises:
+        ValueError: If either dataset is missing from the file.
+    """
     with h5py.File(file_path, 'r') as f:
         if emb_name not in f:
             raise ValueError("{} not found in {}".format(emb_name, file_path))
@@ -23,6 +36,7 @@ def get_file_embs(file_path, emb_name="features", identifier_name="track_ids"):
 
 
 def get_detection_to_track_map(file_path):
+    """Map each ``record_id`` to its ``track_id`` from a ``track_meta.csv`` file."""
     detection_to_track_map = {}
 
     with open(file_path, 'r') as csvfile:
@@ -36,6 +50,10 @@ def get_detection_to_track_map(file_path):
 
 
 def get_detection_to_bb_size_map(file_path):
+    """Map each ``record_id`` to its ``(width, height)`` bbox size from ``track_meta.csv``.
+
+    Returns an empty dict if the CSV has no ``bb_size`` column.
+    """
     detection_to_bb_size_map = {}
 
     with open(file_path, 'r') as csvfile:
@@ -53,7 +71,12 @@ def get_detection_to_bb_size_map(file_path):
 
 
 def get_embs(dir_path, meta_file_name="track_meta.csv", emb_name="features", identifier_name="track_ids"):
+    """Collect embeddings from every run directory found under ``dir_path``.
 
+    Walks ``dir_path`` for ``.h5`` files, joins each with its sibling ``track_meta.csv``,
+    and returns a dict mapping each run directory to a list of
+    ``(track_id, bb_size, embedding)`` tuples.
+    """
     embs = {}
     for root, dirs, files in os.walk(dir_path):
         for file in files:
@@ -83,6 +106,23 @@ def get_embs(dir_path, meta_file_name="track_meta.csv", emb_name="features", ide
 
 
 def accelerated_cosine_similarity(matrix_A, matrix_B, batch_size=512, device='cuda'):
+    """Compute the full cosine-similarity matrix between two sets of vectors.
+
+    Processes ``matrix_A`` and ``matrix_B`` in batches on ``device`` (default CUDA),
+    L2-normalising each batch, and returns the ``(M, N)`` similarity matrix on the CPU.
+
+    Args:
+        matrix_A: Tensor of shape ``(M, E)``.
+        matrix_B: Tensor of shape ``(N, E)``; ``E`` must match ``matrix_A``.
+        batch_size: Rows processed per batch.
+        device: Torch device used for the matmul.
+
+    Returns:
+        A CPU tensor of shape ``(M, N)`` of cosine similarities.
+
+    Raises:
+        ValueError: If the feature dimensions of the two matrices differ.
+    """
     M, E = matrix_A.shape
     N, E_B = matrix_B.shape
 
@@ -107,6 +147,19 @@ def accelerated_cosine_similarity(matrix_A, matrix_B, batch_size=512, device='cu
 
 
 def aggregate_embeddings(embeddings, aggregation_fn):
+    """Collapse per-detection embeddings into one embedding per track.
+
+    Groups ``(track_id, bb_size, emb)`` tuples by ``track_id`` and applies
+    ``aggregation_fn`` to each group's ``(bb_size, emb)`` list (single-detection tracks are
+    passed through unchanged).
+
+    Args:
+        embeddings: Iterable of ``(track_id, bb_size, embedding)`` tuples.
+        aggregation_fn: Callable reducing a list of ``(bb_size, embedding)`` to one vector.
+
+    Returns:
+        A list of ``(track_id, aggregated_embedding)`` tuples.
+    """
     aggregated_embeddings = {}
 
     for track_id, bb_size, emb in tqdm(embeddings, desc="Aggregating embeddings"):
@@ -135,6 +188,12 @@ def _bb_weights(bb_size):
 
 
 def bb_weighted_average(embeddings):
+    """Aggregate embeddings as an average weighted by bounding-box size.
+
+    Larger detections (sum of normalised width and height) contribute more. Falls back to
+    a simple mean if any bbox size is missing. Intended as an ``aggregation_fn`` for
+    :func:`aggregate_embeddings`.
+    """
     bb_size = [(w, h) for (w, h), _ in embeddings]
     embeddings = [torch.tensor(emb) for _, emb in embeddings]
 
@@ -150,6 +209,11 @@ def bb_weighted_average(embeddings):
 
 
 def bb_greedy(embeddings):
+    """Aggregate embeddings by picking the one from the largest bounding box.
+
+    Falls back to a simple mean if any bbox size is missing. Intended as an
+    ``aggregation_fn`` for :func:`aggregate_embeddings`.
+    """
     bb_size = [(w, h) for (w, h), _ in embeddings]
     embeddings = [torch.tensor(emb) for _, emb in embeddings]
 
@@ -165,6 +229,19 @@ def bb_greedy(embeddings):
 
 
 def get_crops_for_id(root_path, track_id, meta_file_name="track_meta.csv"):
+    """Load all saved crop images for a given ``track_id`` in a run directory.
+
+    Reads ``meta_file_name`` for the track's ``crop_path`` entries and loads the
+    corresponding images from ``root_path/vehicle_crops``.
+
+    Args:
+        root_path: A run directory containing the CSV and a ``vehicle_crops`` folder.
+        track_id: Track whose crops to load.
+        meta_file_name: Name of the metadata CSV.
+
+    Returns:
+        A list of images (as read by ``cv2.imread``) for the track.
+    """
     crops = []
 
     with open(os.path.join(root_path, meta_file_name), 'r') as csvfile:
