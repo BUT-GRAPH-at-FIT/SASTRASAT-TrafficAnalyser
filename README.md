@@ -9,6 +9,7 @@
 | **Title (CZ)**  | Metody zpracování dat pro dopravní účely |
 | **Authors**     | ŠPAŇHEL, J.; BERAN, V.; HEROUT, A.; ZEMČÍK, P. |
 | **Affiliation** | Graph@FIT, Brno University of Technology |
+| **Link**        | https://www.fit.vut.cz/research/product/840/ |
 
 TrafficAnalyser processes a video file or RTSP stream through a real-time pipeline that
 **detects** and **tracks** vehicles and pedestrians, **extracts** a 128-dimensional
